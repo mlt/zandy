@@ -65,7 +65,7 @@ public class NoteActivity extends Activity {
         
         /* Get the incoming data from the calling activity */
         final String attKey = getIntent().getStringExtra("com.gimranov.zandy.app.attKey");
-        Attachment att = Attachment.load(attKey, db);
+        final Attachment att = Attachment.load(attKey, db);
         this.att = att;
         
         if (att == null) {
@@ -76,29 +76,39 @@ public class NoteActivity extends Activity {
         
         // FIXME: why is it causing exception?
         // this.setTitle(getResources().getString(R.string.note_for_item,att.title));
-        //file:///android_assets/tinymce/
+
         mWebView = (ZWebView) findViewById(R.id.webview);
         mWebView.getSettings().setJavaScriptEnabled(true);
-        // FIXME: can we template it somehow?
-        String data =
-        "<html xmlns=\"http://www.w3.org/1999/xhtml\">" +
-        "<head>" +
-        "<script type=\"text/javascript\" src=\"tiny_mce.js\"></script>" +
-        "<script type=\"text/javascript\">" +
-    	"tinyMCE.init({" +
-    	"	mode : \"textareas\"," +
-    	"	theme : \"simple\"" +
-    	"});" +
-        "</script>" +
-        "</head>" +
-    	"<body>" +
-        "<textarea id=\"wysiwyg\">" +
-        att.content.optString("note", "") +
-        "</textarea>" +
-        "</body>" +
-        "</html>";
+        mWebView.post(new Runnable() {
 
-        mWebView.loadDataWithBaseURL("file:///android_asset/tiny_mce/", data, "text/html", "UTF-8", null);
+		@Override
+		public void run() {
+	        //file:///android_assets/tinymce/
+	        // FIXME: can we template it somehow?
+	        String data =
+	        "<html xmlns=\"http://www.w3.org/1999/xhtml\">" +
+	        "<head>" +
+	        "<script type=\"text/javascript\" src=\"tiny_mce.js\"></script>" +
+	        "<script type=\"text/javascript\">" +
+	    	"tinyMCE.init({" +
+	    	"	mode : \"textareas\"," +
+	    	"	theme : \"simple\"," +
+	    	"	width : \"100%\"," +
+	    	"	height : \"100%\"" +
+//	    	"   width : \"" + mWebView.getWidth() + "\"," +
+//	    	"   height : \"" + mWebView.getHeight() + "\"" +
+	    	"});" +
+	        "</script>" +
+	        "</head>" +
+	    	"<body>" +
+	        "<textarea id=\"wysiwyg\" width=\"100%\" height=\"100%\">" +
+	        mWebView.getWidth() + //att.content.optString("note", "") +
+	        "</textarea>" +
+	        "</body>" +
+	        "</html>";
+
+	        mWebView.loadDataWithBaseURL("file:///android_asset/tiny_mce/", data, "text/html", "UTF-8", null);
+		}});
     }
     
     @Override
