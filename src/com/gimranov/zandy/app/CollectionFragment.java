@@ -98,6 +98,8 @@ public class CollectionFragment extends ListFragment {
                         i.putExtra("com.gimranov.zandy.app.collectionKey", coll.getKey());
                         startActivity(i);
                     } else {
+                        // TODO Open items with a single click for a single fragment
+                        // and empty sub-collection list when showing items fragment as well
                         Log.d(TAG, "Failed loading child collections for collection");
                         Toast.makeText(getActivity().getApplicationContext(),
                                 getResources().getString(R.string.collection_no_subcollections), 

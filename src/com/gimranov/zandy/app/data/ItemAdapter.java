@@ -23,7 +23,7 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageView;
-import android.widget.ResourceCursorAdapter;
+import android.support.v4.widget.ResourceCursorAdapter;
 import android.widget.TextView;
 
 import com.gimranov.zandy.app.R;
