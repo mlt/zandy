@@ -29,7 +29,8 @@ import org.json.JSONObject;
 
 import android.app.AlertDialog;
 import android.app.Dialog;
-import android.app.ListActivity;
+import android.support.v4.app.ListFragment;
+import android.support.v4.app.DialogFragment;
 import android.app.ProgressDialog;
 import android.app.SearchManager;
 import android.content.DialogInterface;
@@ -40,10 +41,12 @@ import android.os.Handler;
 import android.os.Message;
 import android.text.Editable;
 import android.util.Log;
+import android.view.LayoutInflater;
 import android.view.Menu;
 import android.view.MenuInflater;
 import android.view.MenuItem;
 import android.view.View;
+import android.view.ViewGroup;
 import android.widget.AdapterView;
 import android.widget.AdapterView.OnItemClickListener;
 import android.widget.CursorAdapter;
@@ -62,7 +65,7 @@ import com.google.zxing.integration.android.IntentIntegrator;
 import com.google.zxing.integration.android.IntentResult;
 
 
-public class ItemActivity extends ListActivity {
+public class ItemFragment extends ListFragment {
 
 	private static final String TAG = "com.gimranov.zandy.app.ItemActivity";
 	
@@ -95,47 +98,62 @@ public class ItemActivity extends ListActivity {
 	private ProgressThread progressThread;
 	
 	public String sortBy = "item_year, item_title";
-	
-    /** Called when the activity is first created. */
-    @Override
-    public void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        
-        db = new Database(this);
-		
-        setContentView(R.layout.items);
 
+    @Override
+    public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
+        /*
+        if (container == null) {
+            // see http://developer.android.com/reference/android/app/Fragment.html
+            return null;
+        }
+        */
+        return inflater.inflate(R.layout.items, container, false);
+    }
+
+    @Override
+    public void onActivityCreated(Bundle savedInstanceState) {
+        // TODO Auto-generated method stub
+        super.onActivityCreated(savedInstanceState);
+        db = new Database(getActivity());
+        
         prepareAdapter();
         
         ListView lv = getListView();
         lv.setOnItemClickListener(new OnItemClickListener() {
-        	public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
-     			// If we have a click on an item, do something...
-        		ItemAdapter adapter = (ItemAdapter) parent.getAdapter();
-        		Cursor cur = adapter.getCursor();
-        		// Place the cursor at the selected item
-        		if (cur.moveToPosition(position)) {
-        			// and load an activity for the item
-        			Item item = Item.load(cur);
-        			
-        			Log.d(TAG, "Loading item data with key: "+item.getKey());
-    				// We create and issue a specified intent with the necessary data
-    		    	Intent i = new Intent(getBaseContext(), ItemDataActivity.class);
-    		    	i.putExtra("com.gimranov.zandy.app.itemKey", item.getKey());
-    		    	i.putExtra("com.gimranov.zandy.app.itemDbId", item.dbId);
-    		    	startActivity(i);
-        		} else {
-        			// failed to move cursor-- show a toast
-            		TextView tvTitle = (TextView)view.findViewById(R.id.item_title);
-            		Toast.makeText(getApplicationContext(),
-            				getResources().getString(R.string.cant_open_item, tvTitle.getText()), 
-            				Toast.LENGTH_SHORT).show();
-        		}
-        	}
+            public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
+                // If we have a click on an item, do something...
+                ItemAdapter adapter = (ItemAdapter) parent.getAdapter();
+                Cursor cur = adapter.getCursor();
+                // Place the cursor at the selected item
+                if (cur.moveToPosition(position)) {
+                    // and load an activity for the item
+                    Item item = Item.load(cur);
+                    
+                    Log.d(TAG, "Loading item data with key: "+item.getKey());
+                    // We create and issue a specified intent with the necessary data
+                    Intent i = new Intent(getActivity().getBaseContext(), ItemDataActivity.class);
+                    i.putExtra("com.gimranov.zandy.app.itemKey", item.getKey());
+                    i.putExtra("com.gimranov.zandy.app.itemDbId", item.dbId);
+                    startActivity(i);
+                } else {
+                    // failed to move cursor-- show a toast
+                    TextView tvTitle = (TextView)view.findViewById(R.id.item_title);
+                    Toast.makeText(getActivity().getApplicationContext(),
+                            getResources().getString(R.string.cant_open_item, tvTitle.getText()), 
+                            Toast.LENGTH_SHORT).show();
+                }
+            }
         });
     }
+    
+    /** Called when the activity is first created. */
+    @Override
+    public void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+//        setHasOptionsMenu(true); // necessary for a fragment
+    }
 
-	protected void onResume() {
+	public void onResume() {
 		ItemAdapter adapter = (ItemAdapter) getListAdapter();
 		adapter.changeCursor(prepareCursor());
     	super.onResume();
@@ -150,135 +168,41 @@ public class ItemActivity extends ListActivity {
     }
     
     private void prepareAdapter() {
-		ItemAdapter adapter = new ItemAdapter(this, prepareCursor());
+		ItemAdapter adapter = new ItemAdapter(getActivity(), prepareCursor());
         setListAdapter(adapter);
     }
     
     private Cursor prepareCursor() {
     	Cursor cursor;
         // Be ready for a search
-        Intent intent = getIntent();
+        Intent intent = getActivity().getIntent();
         
         if (Intent.ACTION_SEARCH.equals(intent.getAction())) {
         	query = intent.getStringExtra(SearchManager.QUERY);
         	cursor = getCursor(query);
-          	this.setTitle(getResources().getString(R.string.search_results, query));
+        	getActivity().setTitle(getResources().getString(R.string.search_results, query));
         } else if (query != null) {
            	cursor = getCursor(query);
-          	this.setTitle(getResources().getString(R.string.search_results, query));
+           	getActivity().setTitle(getResources().getString(R.string.search_results, query));
         } else if (intent.getStringExtra("com.gimranov.zandy.app.tag") != null) {
         	String tag = intent.getStringExtra("com.gimranov.zandy.app.tag");
         	Query q = new Query();
         	q.set("tag", tag);
         	cursor = getCursor(q);
-        	this.setTitle(getResources().getString(R.string.tag_viewing_items, tag));
+        	getActivity().setTitle(getResources().getString(R.string.tag_viewing_items, tag));
      	} else {
 	        collectionKey = intent.getStringExtra("com.gimranov.zandy.app.collectionKey");
 	        if (collectionKey != null) {
 	        	ItemCollection coll = ItemCollection.load(collectionKey, db);
 	        	cursor = getCursor(coll);
-	        	this.setTitle(coll.getTitle());
+	        	getActivity().setTitle(coll.getTitle());
 	        } else {
 	        	cursor = getCursor();
-	        	this.setTitle(getResources().getString(R.string.all_items));
+	        	getActivity().setTitle(getResources().getString(R.string.all_items));
 	        }
         }
         return cursor;
     }
-    
-	protected Dialog onCreateDialog(int id, Bundle b) {
-		switch (id) {
-		case DIALOG_NEW:
-			AlertDialog.Builder builder = new AlertDialog.Builder(this);
-			builder.setTitle(getResources().getString(R.string.item_type))
-					// XXX i18n
-		    	    .setItems(Item.ITEM_TYPES_EN, new DialogInterface.OnClickListener() {
-						public void onClick(DialogInterface dialog, int pos) {
-		    	            Item item = new Item(getBaseContext(), Item.ITEM_TYPES[pos]);
-		    	            item.dirty = APIRequest.API_DIRTY;
-		    	            item.save(db);
-		    	            if (collectionKey != null) {
-		    	            	ItemCollection coll = ItemCollection.load(collectionKey, db);
-		    	            	if (coll != null) {
-		    	            		coll.loadChildren(db);
-		    	            		coll.add(item);
-		    	            		coll.saveChildren(db);
-		    	            	}
-		    	            }
-		        			Log.d(TAG, "Loading item data with key: "+item.getKey());
-		    				// We create and issue a specified intent with the necessary data
-		    		    	Intent i = new Intent(getBaseContext(), ItemDataActivity.class);
-		    		    	i.putExtra("com.gimranov.zandy.app.itemKey", item.getKey());
-		    		    	startActivity(i);
-		    	        }
-		    	    });
-			AlertDialog dialog = builder.create();
-			return dialog;
-		case DIALOG_SORT:
-			AlertDialog.Builder builder2 = new AlertDialog.Builder(this);
-			builder2.setTitle(getResources().getString(R.string.set_sort_order))
-					// XXX i18n
-		    	    .setItems(SORTS_EN, new DialogInterface.OnClickListener() {
-						public void onClick(DialogInterface dialog, int pos) {
-							Cursor cursor;
-							setSortBy(SORTS[pos]);
-							if (collectionKey != null)
-								cursor = getCursor(ItemCollection.load(collectionKey, db));
-							else if (query != null)
-								cursor = getCursor(query);
-							else
-								cursor = getCursor();
-							ItemAdapter adapter = (ItemAdapter) getListAdapter();
-							adapter.changeCursor(cursor);
-		        			Log.d(TAG, "Re-sorting by: "+SORTS[pos]);
-		    	        }
-		    	    });
-			AlertDialog dialog2 = builder2.create();
-			return dialog2;
-		case DIALOG_PROGRESS:
-			Log.d(TAG, "_____________________dialog_progress");
-			mProgressDialog = new ProgressDialog(this);
-			mProgressDialog.setProgressStyle(ProgressDialog.STYLE_SPINNER);
-			mProgressDialog.setIndeterminate(true);
-			// XXX i18n
-			mProgressDialog.setMessage("Looking up item...");
-			return mProgressDialog;
-		case DIALOG_IDENTIFIER:
-			final EditText input = new EditText(this);
-			// XXX i18n
-			input.setHint("Enter identifier");
-			
-			final ItemActivity current = this;
-			
-			dialog = new AlertDialog.Builder(this)
-				// XXX i18n
-	    	    .setTitle("Look up item by identifier")
-	    	    .setView(input)
-	    	    .setPositiveButton("Search", new DialogInterface.OnClickListener() {
-					public void onClick(DialogInterface dialog, int whichButton) {
-	    	            Editable value = input.getText();
-	    	            // run search
-	    	            Bundle c = new Bundle();
-	    	            c.putString("mode", "isbn");
-	    	            c.putString("identifier", value.toString());
-	    	            removeDialog(DIALOG_PROGRESS);
-	    	            showDialog(DIALOG_PROGRESS, c);
-	    	        }
-	    	    }).setNeutralButton("Scan", new DialogInterface.OnClickListener() {
-	    	        public void onClick(DialogInterface dialog, int whichButton) {
-	    	        		IntentIntegrator integrator = new IntentIntegrator(current);
-	    	        		integrator.initiateScan();
-	    	        	}
-	    	    }).setNegativeButton(getResources().getString(R.string.cancel), new DialogInterface.OnClickListener() {
-	    	        public void onClick(DialogInterface dialog, int whichButton) {
-	    	        	// do nothing
-	    	        }
-	    	    }).create();
-			return dialog;
-		default:
-			return null;
-		}
-	}
     
 	protected void onPrepareDialog(int id, Dialog dialog, Bundle b) {
 		switch(id) {
@@ -288,8 +212,7 @@ public class ItemActivity extends ListActivity {
 	}
 	
     @Override
-    public boolean onCreateOptionsMenu(Menu menu) {
-        MenuInflater inflater = getMenuInflater();
+    public void onCreateOptionsMenu(Menu menu, MenuInflater inflater) {
         inflater.inflate(R.menu.zotero_menu, menu);
 
         // Turn on sort item
@@ -306,17 +229,16 @@ public class ItemActivity extends ListActivity {
         MenuItem identifier = menu.findItem(R.id.do_identifier);
         identifier.setEnabled(true);
         identifier.setVisible(true);
-        
-        return true;
     }
     
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
+        DialogFragment newFragment = null;
         // Handle item selection
         switch (item.getItemId()) {
         case R.id.do_sync:
-        	if (!ServerCredentials.check(getBaseContext())) {
-            	Toast.makeText(getBaseContext(), getResources().getString(R.string.sync_log_in_first), 
+        	if (!ServerCredentials.check(getActivity().getBaseContext())) {
+            	Toast.makeText(getActivity().getBaseContext(), getResources().getString(R.string.sync_log_in_first), 
         				Toast.LENGTH_SHORT).show();
             	return true;
         	}
@@ -326,19 +248,19 @@ public class ItemActivity extends ListActivity {
         	APIRequest[] reqs = new APIRequest[Item.queue.size() + 1];
         	for (int j = 0; j < Item.queue.size(); j++) {
         		Log.d(TAG, "Adding dirty item to sync: "+Item.queue.get(j).getTitle());
-        		reqs[j] = ServerCredentials.prep(getBaseContext(), APIRequest.update(Item.queue.get(j)));
+        		reqs[j] = ServerCredentials.prep(getActivity().getBaseContext(), APIRequest.update(Item.queue.get(j)));
         	}
         	if (collectionKey == null) {
             	Log.d(TAG, "Adding sync request for all items");
             	APIRequest req = new APIRequest(ServerCredentials.APIBASE 
-            			+ ServerCredentials.prep(getBaseContext(), ServerCredentials.ITEMS +"/top"),
+            			+ ServerCredentials.prep(getActivity().getBaseContext(), ServerCredentials.ITEMS +"/top"),
             			"get", null);
     			req.disposition = "xml";
     			reqs[Item.queue.size()] = req;
         	} else {
             	Log.d(TAG, "Adding sync request for collection: " + collectionKey);
             	APIRequest req = new APIRequest(ServerCredentials.APIBASE
-							+ ServerCredentials.prep(getBaseContext(), ServerCredentials.COLLECTIONS)
+							+ ServerCredentials.prep(getActivity().getBaseContext(), ServerCredentials.COLLECTIONS)
 							+"/"
 							+ collectionKey + "/items",
 						"get",
@@ -348,29 +270,29 @@ public class ItemActivity extends ListActivity {
         	}
         	// This then provides a full queue, with the locally dirty items first, followed
         	// by a scoped sync. Cool!
-			new ZoteroAPITask(getBaseContext(), (CursorAdapter) getListAdapter()).execute(reqs);
-        	Toast.makeText(getApplicationContext(), getResources().getString(R.string.sync_started), 
+			new ZoteroAPITask(getActivity().getBaseContext(), (CursorAdapter) getListAdapter()).execute(reqs);
+        	Toast.makeText(getActivity().getApplicationContext(), getResources().getString(R.string.sync_started), 
     				Toast.LENGTH_SHORT).show();
             return true;
         case R.id.do_new:
-        	removeDialog(DIALOG_NEW);
-        	showDialog(DIALOG_NEW);
+            newFragment = new AlertDialogFragment(DIALOG_NEW);
+            newFragment.show(getFragmentManager(), "DIALOG_NEW");
             return true;
         case R.id.do_identifier:
-        	removeDialog(DIALOG_IDENTIFIER);
-        	showDialog(DIALOG_IDENTIFIER);
+            newFragment = new AlertDialogFragment(DIALOG_IDENTIFIER);
+            newFragment.show(getFragmentManager(), "DIALOG_IDENTIFIER");
             return true;
         case R.id.do_search:
-        	onSearchRequested();
+//        	onSearchRequested(); // FIXME add search back to items list
             return true;
         case R.id.do_prefs:
-	    	Intent i = new Intent(getBaseContext(), SettingsActivity.class);
+	    	Intent i = new Intent(getActivity().getBaseContext(), SettingsActivity.class);
 	    	Log.d(TAG, "Intent for class:  "+i.getClass().toString());
 	    	startActivity(i);
 	    	return true;
         case R.id.do_sort:
-        	removeDialog(DIALOG_SORT);
-        	showDialog(DIALOG_SORT);
+            newFragment = new AlertDialogFragment(DIALOG_SORT);
+            newFragment.show(getFragmentManager(), "DIALOG_SORT");
         	return true;
         default:
             return super.onOptionsItemSelected(item);
@@ -428,7 +350,7 @@ public class ItemActivity extends ListActivity {
 		IntentResult scanResult = IntentIntegrator.parseActivityResult(requestCode, resultCode, intent);
 		if (scanResult != null) {
 		    // handle scan result
-			Bundle b = new Bundle();
+			Bundle b = new Bundle(); // FIXME make use of bundle?
 			b.putString("mode", "isbn");
 			b.putString("identifier", scanResult.getContents());
 			if (scanResult != null
@@ -436,17 +358,17 @@ public class ItemActivity extends ListActivity {
 				Log.d(TAG, b.getString("identifier"));
 				progressThread = new ProgressThread(handler, b);
 				progressThread.start();
-				removeDialog(DIALOG_PROGRESS);			
-				showDialog(DIALOG_PROGRESS, b);
+	            DialogFragment newFragment = new AlertDialogFragment(DIALOG_PROGRESS);
+	            newFragment.show(getFragmentManager(), "DIALOG_PROGRESS"); // , b
 			} else {
 				// XXX i18n
-				Toast.makeText(getApplicationContext(),
+				Toast.makeText(getActivity().getApplicationContext(),
 						"Scan canceled or failed", 
 	    				Toast.LENGTH_SHORT).show();
 			}
 		} else {
 			// XXX i18n
-			Toast.makeText(getApplicationContext(),
+			Toast.makeText(getActivity().getApplicationContext(),
 					"Scan canceled or failed", 
     				Toast.LENGTH_SHORT).show();
 		}
@@ -471,7 +393,7 @@ public class ItemActivity extends ListActivity {
 					
 					Log.d(TAG, "Loading new item data with key: "+itemKey);
     				// We create and issue a specified intent with the necessary data
-    		    	Intent i = new Intent(getBaseContext(), ItemDataActivity.class);
+    		    	Intent i = new Intent(getActivity().getBaseContext(), ItemDataActivity.class);
     		    	i.putExtra("com.gimranov.zandy.app.itemKey", itemKey);
     		    	startActivity(i);
 				}
@@ -484,9 +406,9 @@ public class ItemActivity extends ListActivity {
 			}
 			
 			if (ProgressThread.STATE_ERROR == msg.arg2) {
-				dismissDialog(DIALOG_PROGRESS);
+			    getActivity().dismissDialog(DIALOG_PROGRESS);
 				// XXX i18n
-				Toast.makeText(getBaseContext(), "Error fetching metadata", 
+				Toast.makeText(getActivity().getBaseContext(), "Error fetching metadata", 
 	    				Toast.LENGTH_SHORT).show();
 				progressThread.setState(ProgressThread.STATE_DONE);
 				return;
@@ -608,7 +530,7 @@ public class ItemActivity extends ListActivity {
 				// TODO Fix this
 				type = "book";
 				
-				Item item = new Item(getBaseContext(), type);
+				Item item = new Item(getActivity().getBaseContext(), type);
 				
 				JSONObject content = item.getContent();
 				
@@ -664,4 +586,109 @@ public class ItemActivity extends ListActivity {
 			mState = state;
 		}
 	}
+	
+	public class AlertDialogFragment extends DialogFragment {
+	    private int id;
+	    public AlertDialogFragment (int id) {
+	        this.id = id;
+	        Bundle args = new Bundle();
+//	        args.putInt("title", title);
+	        this.setArguments(args);
+	    }
+
+	    @Override
+	    public Dialog onCreateDialog(Bundle savedInstanceState) {
+	        switch (id) {
+	        case DIALOG_NEW:
+	            AlertDialog.Builder builder = new AlertDialog.Builder(getActivity());
+	            builder.setTitle(getResources().getString(R.string.item_type))
+	                    // XXX i18n
+	                    .setItems(Item.ITEM_TYPES_EN, new DialogInterface.OnClickListener() {
+	                        public void onClick(DialogInterface dialog, int pos) {
+	                            Item item = new Item(getActivity().getBaseContext(), Item.ITEM_TYPES[pos]);
+	                            item.dirty = APIRequest.API_DIRTY;
+	                            item.save(db);
+	                            if (collectionKey != null) {
+	                                ItemCollection coll = ItemCollection.load(collectionKey, db);
+	                                if (coll != null) {
+	                                    coll.loadChildren(db);
+	                                    coll.add(item);
+	                                    coll.saveChildren(db);
+	                                }
+	                            }
+	                            Log.d(TAG, "Loading item data with key: "+item.getKey());
+	                            // We create and issue a specified intent with the necessary data
+	                            Intent i = new Intent(getActivity().getBaseContext(), ItemDataActivity.class);
+	                            i.putExtra("com.gimranov.zandy.app.itemKey", item.getKey());
+	                            startActivity(i);
+	                        }
+	                    });
+	            AlertDialog dialog = builder.create();
+	            return dialog;
+	        case DIALOG_SORT:
+	            AlertDialog.Builder builder2 = new AlertDialog.Builder(getActivity());
+	            builder2.setTitle(getResources().getString(R.string.set_sort_order))
+	                    // XXX i18n
+	                    .setItems(SORTS_EN, new DialogInterface.OnClickListener() {
+	                        public void onClick(DialogInterface dialog, int pos) {
+	                            Cursor cursor;
+	                            setSortBy(SORTS[pos]);
+	                            if (collectionKey != null)
+	                                cursor = getCursor(ItemCollection.load(collectionKey, db));
+	                            else if (query != null)
+	                                cursor = getCursor(query);
+	                            else
+	                                cursor = getCursor();
+	                            ItemAdapter adapter = (ItemAdapter) getListAdapter();
+	                            adapter.changeCursor(cursor);
+	                            Log.d(TAG, "Re-sorting by: "+SORTS[pos]);
+	                        }
+	                    });
+	            AlertDialog dialog2 = builder2.create();
+	            return dialog2;
+	        case DIALOG_PROGRESS:
+	            Log.d(TAG, "_____________________dialog_progress");
+	            mProgressDialog = new ProgressDialog(getActivity());
+	            mProgressDialog.setProgressStyle(ProgressDialog.STYLE_SPINNER);
+	            mProgressDialog.setIndeterminate(true);
+	            // XXX i18n
+	            mProgressDialog.setMessage("Looking up item...");
+	            return mProgressDialog;
+	        case DIALOG_IDENTIFIER:
+	            final EditText input = new EditText(getActivity());
+	            // XXX i18n
+	            input.setHint("Enter identifier");
+	            
+	            dialog = new AlertDialog.Builder(getActivity())
+	                // XXX i18n
+	                .setTitle("Look up item by identifier")
+	                .setView(input)
+	                .setPositiveButton("Search", new DialogInterface.OnClickListener() {
+	                    public void onClick(DialogInterface dialog, int whichButton) {
+	                        Editable value = input.getText();
+	                        // run search
+	                        Bundle c = new Bundle(); // FIXME make use of bundle?
+	                        c.putString("mode", "isbn");
+	                        c.putString("identifier", value.toString());
+	                        DialogFragment newFragment = new AlertDialogFragment(DIALOG_PROGRESS);
+	                        newFragment.show(getFragmentManager(), "DIALOG_PROGRESS"); // ,c
+	                    }
+	                }).setNeutralButton("Scan", new DialogInterface.OnClickListener() {
+	                    public void onClick(DialogInterface dialog, int whichButton) {
+	                            IntentIntegrator integrator = new IntentIntegrator(getActivity());
+	                            integrator.initiateScan();
+	                        }
+	                }).setNegativeButton(getResources().getString(R.string.cancel), new DialogInterface.OnClickListener() {
+	                    public void onClick(DialogInterface dialog, int whichButton) {
+	                        // do nothing
+	                    }
+	                }).create();
+	            return dialog;
+	        default:
+	            return null;
+	        }
+	    }
+
+	}
+
 }
