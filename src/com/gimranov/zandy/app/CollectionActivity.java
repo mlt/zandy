@@ -18,8 +18,14 @@ package com.gimranov.zandy.app;
 
 import android.os.Bundle;
 import android.support.v4.app.FragmentActivity;
+import android.util.Log;
+import android.support.v4.app.ActionBar;
+import android.support.v4.app.ActionBar.Tab;
+import android.support.v4.app.FragmentTransaction;
 
-public class CollectionActivity extends FragmentActivity {
+// http://stackoverflow.com/questions/7499017/is-it-possible-to-display-tabs-without-using-fragments-in-android-3-0 
+
+public class CollectionActivity extends FragmentActivity implements ActionBar.TabListener {
     @SuppressWarnings("unused")
     private static final String TAG = "com.gimranov.zandy.app.CollectionActivity";
 
@@ -28,6 +34,12 @@ public class CollectionActivity extends FragmentActivity {
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.collections_activity);
+        
+        ActionBar bar = getSupportActionBar();
+        bar.setNavigationMode(ActionBar.NAVIGATION_MODE_TABS);
+        bar.addTab(bar.newTab().setText("zzz").setTabListener(this));
+        bar.selectTab(bar.getTabAt(0));
+        
         /* Programmatically create fragment
         // the following somehow works, but what about our IDs?
         // Create the list fragment and add it as our sole content.
@@ -49,4 +61,21 @@ public class CollectionActivity extends FragmentActivity {
         */
     }
 
+    @Override
+    public void onTabReselected(Tab tab, FragmentTransaction ft) {
+        // TODO Auto-generated method stub
+        
+    }
+
+    @Override
+    public void onTabSelected(Tab tab, FragmentTransaction ft) {
+        // TODO Auto-generated method stub
+        Log.d(TAG, "Position: " + tab.getPosition());
+    }
+
+    @Override
+    public void onTabUnselected(Tab tab, FragmentTransaction ft) {
+        // TODO Auto-generated method stub
+        
+    }
 }

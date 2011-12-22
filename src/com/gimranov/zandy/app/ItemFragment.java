@@ -42,9 +42,9 @@ import android.os.Message;
 import android.text.Editable;
 import android.util.Log;
 import android.view.LayoutInflater;
-import android.view.Menu;
+import android.support.v4.view.Menu;
 import android.view.MenuInflater;
-import android.view.MenuItem;
+import android.support.v4.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.AdapterView;
@@ -67,7 +67,7 @@ import com.google.zxing.integration.android.IntentResult;
 
 public class ItemFragment extends ListFragment {
 
-	private static final String TAG = "com.gimranov.zandy.app.ItemActivity";
+	private static final String TAG = "com.gimranov.zandy.app.ItemFragment";
 	
 	static final int DIALOG_VIEW = 0;
 	static final int DIALOG_NEW = 1;
@@ -236,6 +236,12 @@ public class ItemFragment extends ListFragment {
         DialogFragment newFragment = null;
         // Handle item selection
         switch (item.getItemId()) {
+        case android.R.id.home:
+            // app icon in action bar clicked; go home
+            Intent intent = new Intent(getActivity(), CollectionActivity.class);
+            intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
+            startActivity(intent);
+            return true;
         case R.id.do_sync:
         	if (!ServerCredentials.check(getActivity().getBaseContext())) {
             	Toast.makeText(getActivity().getBaseContext(), getResources().getString(R.string.sync_log_in_first), 
@@ -283,7 +289,7 @@ public class ItemFragment extends ListFragment {
             newFragment.show(getFragmentManager(), "DIALOG_IDENTIFIER");
             return true;
         case R.id.do_search:
-//        	onSearchRequested(); // FIXME add search back to items list
+        	getActivity().onSearchRequested(); // FIXME add search back to items list
             return true;
         case R.id.do_prefs:
 	    	Intent i = new Intent(getActivity().getBaseContext(), SettingsActivity.class);

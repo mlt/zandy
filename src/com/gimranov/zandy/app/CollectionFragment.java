@@ -16,15 +16,19 @@
  ******************************************************************************/
 package com.gimranov.zandy.app;
 
+import android.support.v4.app.FragmentActivity;
+import android.support.v4.app.ActionBar;
+import android.support.v4.app.ActionBar.Tab;
+import android.support.v4.app.FragmentTransaction;
 import android.support.v4.app.ListFragment;
 import android.content.Intent;
 import android.database.Cursor;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.LayoutInflater;
-import android.view.Menu;
+import android.support.v4.view.Menu;
 import android.view.MenuInflater;
-import android.view.MenuItem;
+import android.support.v4.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.AdapterView;
@@ -42,7 +46,7 @@ import com.gimranov.zandy.app.task.APIRequest;
 import com.gimranov.zandy.app.task.ZoteroAPITask;
 
 /* Rework for collections only, then make another one for items */
-public class CollectionFragment extends ListFragment {
+public class CollectionFragment extends ListFragment  implements ActionBar.TabListener {
 
 	private static final String TAG = "com.gimranov.zandy.app.CollectionFragment";
 	private ItemCollection collection;
@@ -58,6 +62,23 @@ public class CollectionFragment extends ListFragment {
         */
         return inflater.inflate(R.layout.collections, container, false);
 	}
+    @Override
+    public void onTabReselected(Tab tab, FragmentTransaction ft) {
+        // TODO Auto-generated method stub
+        
+    }
+
+    @Override
+    public void onTabSelected(Tab tab, FragmentTransaction ft) {
+        // TODO Auto-generated method stub
+        Log.d(TAG, "Position: " + tab.getPosition());
+    }
+
+    @Override
+    public void onTabUnselected(Tab tab, FragmentTransaction ft) {
+        // TODO Auto-generated method stub
+        
+    }
 
     @Override
     public void onActivityCreated(Bundle savedInstanceState) {
@@ -74,6 +95,10 @@ public class CollectionFragment extends ListFragment {
             // We set the title to the current collection
             this.collection = coll;
             getActivity().setTitle(coll.getTitle());
+            ActionBar bar = ((FragmentActivity)getActivity()).getSupportActionBar();
+            bar.addTab(bar.newTab().setText(coll.getTitle()).setTabListener(this));
+            bar.selectTab(bar.getTabAt(0));
+            
             collectionAdapter = new CollectionAdapter(getActivity(), create(coll));
         } else {
             getActivity().setTitle(getResources().getString(R.string.collections));
