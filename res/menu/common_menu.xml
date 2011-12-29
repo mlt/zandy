@@ -15,12 +15,11 @@
   You should have received a copy of the GNU Affero General Public License
   along with Zandy.  If not, see <http://www.gnu.org/licenses/>.
 -->
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:orientation="vertical"
-    android:layout_width="match_parent"
-    android:layout_height="match_parent">
-    <LinearLayout
-            android:id="@+id/collections"
-            android:layout_width="match_parent"
-            android:layout_height="match_parent" />
-</LinearLayout>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:id="@+id/do_sync"
+          android:icon="@drawable/glyphish_02_redo"
+          android:title="@string/menu_sync"  android:menuCategory="secondary" />
+    <item android:id="@+id/do_prefs"
+          android:icon="@drawable/glyphish_106_sliders"
+          android:title="@string/menu_prefs" android:menuCategory="system"/>
+</menu>

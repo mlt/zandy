@@ -16,29 +16,28 @@
  ******************************************************************************/
 package com.gimranov.zandy.app;
 
-import android.support.v4.app.FragmentActivity;
-import android.support.v4.app.ActionBar;
-import android.support.v4.app.ActionBar.Tab;
-import android.support.v4.app.FragmentTransaction;
-import android.support.v4.app.ListFragment;
 import android.content.Intent;
 import android.database.Cursor;
 import android.os.Bundle;
+import android.support.v4.app.FragmentManager;
+import android.support.v4.app.FragmentTransaction;
+import android.support.v4.app.ListFragment;
+import android.support.v4.view.Menu;
+import android.support.v4.view.MenuItem;
+import android.support.v4.widget.CursorAdapter;
 import android.util.Log;
 import android.view.LayoutInflater;
-import android.support.v4.view.Menu;
 import android.view.MenuInflater;
-import android.support.v4.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.AdapterView;
 import android.widget.AdapterView.OnItemClickListener;
 import android.widget.AdapterView.OnItemLongClickListener;
-import android.support.v4.widget.CursorAdapter;
 import android.widget.ListView;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import com.gimranov.zandy.app.CollectionActivity;
 import com.gimranov.zandy.app.data.CollectionAdapter;
 import com.gimranov.zandy.app.data.Database;
 import com.gimranov.zandy.app.data.ItemCollection;
@@ -46,12 +45,27 @@ import com.gimranov.zandy.app.task.APIRequest;
 import com.gimranov.zandy.app.task.ZoteroAPITask;
 
 /* Rework for collections only, then make another one for items */
-public class CollectionFragment extends ListFragment  implements ActionBar.TabListener {
+public class CollectionFragment extends ListFragment {
 
 	private static final String TAG = "com.gimranov.zandy.app.CollectionFragment";
 	private ItemCollection collection;
 	private Database db;
+	private CollectionAdapter collectionAdapter;
 
+	
+	private String collectionKey;
+    public CollectionFragment() {
+        super();
+        collectionKey = null;
+        this.collection = null;
+    }
+
+    public CollectionFragment(String collectionKey) {
+        super();
+        this.collectionKey = collectionKey;
+        this.collection = null;
+    }
+    
     @Override
 	public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
         /*
@@ -62,51 +76,16 @@ public class CollectionFragment extends ListFragment  implements ActionBar.TabLi
         */
         return inflater.inflate(R.layout.collections, container, false);
 	}
-    @Override
-    public void onTabReselected(Tab tab, FragmentTransaction ft) {
-        // TODO Auto-generated method stub
-        
-    }
-
-    @Override
-    public void onTabSelected(Tab tab, FragmentTransaction ft) {
-        // TODO Auto-generated method stub
-        Log.d(TAG, "Position: " + tab.getPosition());
-    }
-
-    @Override
-    public void onTabUnselected(Tab tab, FragmentTransaction ft) {
-        // TODO Auto-generated method stub
-        
-    }
-
+    
     @Override
     public void onActivityCreated(Bundle savedInstanceState) {
         // TODO Auto-generated method stub
         super.onActivityCreated(savedInstanceState);
-        
-        db = new Database(getActivity()); // is context used somewhere? and what is it for?
-        
-        CollectionAdapter collectionAdapter;
-        
-        String collectionKey = getActivity().getIntent().getStringExtra("com.gimranov.zandy.app.collectionKey");
-        if (collectionKey != null) {
-            ItemCollection coll = ItemCollection.load(collectionKey, db);
-            // We set the title to the current collection
-            this.collection = coll;
-            getActivity().setTitle(coll.getTitle());
-            ActionBar bar = ((FragmentActivity)getActivity()).getSupportActionBar();
-            bar.addTab(bar.newTab().setText(coll.getTitle()).setTabListener(this));
-            bar.selectTab(bar.getTabAt(0));
-            
-            collectionAdapter = new CollectionAdapter(getActivity(), create(coll));
-        } else {
-            getActivity().setTitle(getResources().getString(R.string.collections));
-            collectionAdapter = new CollectionAdapter(getActivity(), create());
-        }
+      
         setListAdapter(collectionAdapter);
 
         ListView lv = getListView();
+        // XXX Why don't we use this as a listener?
         lv.setOnItemClickListener(new OnItemClickListener() {
             public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
                 CollectionAdapter adapter = (CollectionAdapter) parent.getAdapter();
@@ -115,16 +94,22 @@ public class CollectionFragment extends ListFragment  implements ActionBar.TabLi
                 if (cur.moveToPosition(position)) {
                     // and replace the cursor with one for the selected collection
                     ItemCollection coll = ItemCollection.load(cur);
-                    if (coll != null && coll.getKey() != null && coll.getSubcollections(db).size() > 0) {
+                    ItemFragment items = (ItemFragment) getFragmentManager().findFragmentById(R.id.items);
+                    if (coll != null && coll.getKey() != null &&
+                            ((null != items && items.isInLayout()) || coll.getSubcollections(db).size() > 0 )
+                            ) {
                         Log.d(TAG, "Loading child collection with key: "+coll.getKey());
                         // We create and issue a specified intent with the necessary data
-                        // TODO use fragment transaction to replace existing one?
-                        Intent i = new Intent(getActivity().getBaseContext(), CollectionActivity.class);
-                        i.putExtra("com.gimranov.zandy.app.collectionKey", coll.getKey());
-                        startActivity(i);
+                        FragmentManager fragmentManager = getFragmentManager();
+                        FragmentTransaction transaction  = fragmentManager.beginTransaction();
+                        if (collection != null)
+                            transaction.setBreadCrumbTitle(collection.getTitle());
+                        CollectionFragment fragment = new CollectionFragment(coll.getKey());
+                        transaction.replace(R.id.collections, fragment);
+                        transaction.addToBackStack(null);
+                        transaction.setTransition(FragmentTransaction.TRANSIT_FRAGMENT_FADE);
+                        transaction.commit();
                     } else {
-                        // TODO Open items with a single click for a single fragment
-                        // and empty sub-collection list when showing items fragment as well
                         Log.d(TAG, "Failed loading child collections for collection");
                         Toast.makeText(getActivity().getApplicationContext(),
                                 getResources().getString(R.string.collection_no_subcollections), 
@@ -192,6 +177,27 @@ public class CollectionFragment extends ListFragment  implements ActionBar.TabLi
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setHasOptionsMenu(true); // necessary for a fragment
+        db = new Database(getActivity()); // is context used somewhere? and what is it for?
+        if (null != collectionKey) {
+            this.collection = ItemCollection.load(collectionKey, db);;
+        }
+        if (null == collection)
+            collectionAdapter = new CollectionAdapter(getActivity(), create());
+        else {
+            collectionAdapter = new CollectionAdapter(getActivity(), create(collection));
+        }
+    }
+    
+    @Override
+    public void onResume() {
+        ItemFragment items = (ItemFragment) getFragmentManager().findFragmentById(R.id.items);
+        if (null != items && items.isInLayout()) {
+            // TODO replace fragment as per another todo that will solve other issues
+            items.showCollection(collectionKey);
+        }
+        CollectionActivity ca = (CollectionActivity)getActivity();
+        ca.collectionKey = collectionKey; // FIXME ugly hack
+        super.onResume();
     }
 /*    
     public void onResume() {
@@ -206,7 +212,9 @@ public class CollectionFragment extends ListFragment  implements ActionBar.TabLi
 */    
     public void onDestroy() {
 		CollectionAdapter adapter = (CollectionAdapter) getListAdapter();
-		Cursor cur = adapter.getCursor();
+		Cursor cur = null;
+		// for some reason I get null at some point when changing back from landscape mode
+		if (null != adapter) cur = adapter.getCursor();
 		if(cur != null) cur.close();
 		if (db != null) db.close();
 		super.onDestroy();
@@ -214,43 +222,33 @@ public class CollectionFragment extends ListFragment  implements ActionBar.TabLi
     
     @Override
     public void onCreateOptionsMenu(Menu menu, MenuInflater inflater) {
-        inflater.inflate(R.menu.zotero_menu, menu);
+        inflater.inflate(R.menu.collections_menu, menu);
     }
     
     @Override
     public boolean onOptionsItemSelected(MenuItem item) {
         // Handle item selection
         switch (item.getItemId()) {
-        case R.id.do_sync:
-        	if (!ServerCredentials.check(getActivity().getApplicationContext())) {
-            	Toast.makeText(getActivity().getApplicationContext(), getResources().getString(R.string.sync_log_in_first), 
-        				Toast.LENGTH_SHORT).show();
-            	return true;
-        	}
-        	Log.d(TAG, "Making sync request for all collections");
-        	APIRequest req = new APIRequest(ServerCredentials.APIBASE 
-        			+ ServerCredentials.prep(getActivity().getBaseContext(), ServerCredentials.COLLECTIONS),
-        			"get", null);
-			req.disposition = "xml";
-			new ZoteroAPITask(getActivity().getBaseContext(), (CursorAdapter) getListAdapter()).execute(req);	
-        	Toast.makeText(getActivity().getApplicationContext(), getResources().getString(R.string.sync_collection), 
-    				Toast.LENGTH_SHORT).show();
-            return true;
         case R.id.do_new:
         	Log.d(TAG, "Can't yet make new collections");
         	// XXX no i18n for temporary string
         	Toast.makeText(getActivity().getApplicationContext(), "Sorry, new collection creation is not yet possible. Soon!", 
     				Toast.LENGTH_SHORT).show();
             return true;
-        case R.id.do_prefs:
-            startActivity(new Intent(getActivity(), SettingsActivity.class));
-            return true;
         default:
             return super.onOptionsItemSelected(item);
         }
     }
-    
-	/**
+    /*
+    @Override
+    public void onPrepareOptionsMenu(Menu menu) {
+        MenuItem sync = menu.findItem(R.id.do_sync_all);
+        sync.setEnabled(true);
+        sync.setVisible(true);
+        super.onPrepareOptionsMenu(menu);
+    }
+    */
+    /**
 	 * Gives a cursor for top-level collections
 	 * @return
 	 */

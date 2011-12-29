@@ -16,6 +16,11 @@
  ******************************************************************************/
 package com.gimranov.zandy.app.data;
 
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Set;
+
 import android.content.Context;
 import android.database.Cursor;
 import android.util.Log;
@@ -23,6 +28,7 @@ import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
 import android.widget.ImageView;
+import android.widget.SectionIndexer;
 import android.support.v4.widget.ResourceCursorAdapter;
 import android.widget.TextView;
 
@@ -33,11 +39,43 @@ import com.gimranov.zandy.app.R;
  * @author ajlyon
  *
  */
-public class ItemAdapter extends ResourceCursorAdapter {
+public class ItemAdapter extends ResourceCursorAdapter implements SectionIndexer {
 	private static final String TAG = "com.gimranov.zandy.app.data.ItemAdapter";
 	
+	HashMap<String, Integer> indexer;
+    String[] sections;
+    String field;
+    
 	public ItemAdapter(Context context, Cursor cursor) {
 		super(context, R.layout.list_item, cursor, false);
+		field = "item_year";
+	}
+	
+	@Override
+	public void changeCursor(Cursor cursor) {
+	    super.changeCursor(cursor);
+	    if (null == cursor) // TODO trace where it is coming from
+	        return; // probably empty collections
+	    Log.d(TAG, "Indexing sections by "+field);
+	    indexer = new HashMap<String, Integer>();
+        int count = 0;
+        while (!cursor.isAfterLast()) {
+            int idx = cursor.getColumnIndex(field);
+            String s = cursor.getString(idx);
+            if (s.length()>0) { // isEmpty requires API 9
+                if (!"item_year".equals(field))
+                    s =  s.substring(0, 1).toUpperCase();
+                indexer.put(s, count);
+                count++;
+            }
+            cursor.moveToNext();
+        }
+        Set<String> sectionLetters = indexer.keySet();
+        // create a list from the set to sort
+        ArrayList<String> sectionList = new ArrayList<String>(sectionLetters); 
+        Collections.sort(sectionList); // what if non-YYYY year?
+        sections = new String[sectionList.size()];
+        sectionList.toArray(sections);      
 	}
 	
     public View newView(Context context, Cursor cur, ViewGroup parent) {
@@ -79,4 +117,25 @@ public class ItemAdapter extends ResourceCursorAdapter {
 		tvTitle.setText(item.getTitle());
 		
 	}
+
+    @Override
+    public int getPositionForSection(int arg0) {
+        return indexer.get(sections[arg0]);
+    }
+
+    @Override
+    public int getSectionForPosition(int arg0) {
+        // TODO Auto-generated method stub
+        return 0;
+    }
+
+    @Override
+    public Object[] getSections() {
+        Log.d(TAG,"Returning list of sections");
+        return sections;
+    }
+    
+    public void setField(String field) {
+        this.field = field;
+    }
 }

@@ -92,12 +92,19 @@ public class ItemFragment extends ListFragment {
 	
 	private String collectionKey;
 	private String query;
+	private String tag;
 	private Database db;
 		
 	private ProgressDialog mProgressDialog;
 	private ProgressThread progressThread;
 	
 	public String sortBy = "item_year, item_title";
+	
+    public ItemFragment () {
+        tag = null;
+        query = null;
+        collectionKey = null;
+    }
 
     @Override
     public View onCreateView(LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
@@ -174,24 +181,29 @@ public class ItemFragment extends ListFragment {
     
     private Cursor prepareCursor() {
     	Cursor cursor;
-        // Be ready for a search
+    	// TODO move necessary functionality to ItemActivity
         Intent intent = getActivity().getIntent();
-        
+        // Be ready for a search
+/*
+
         if (Intent.ACTION_SEARCH.equals(intent.getAction())) {
         	query = intent.getStringExtra(SearchManager.QUERY);
         	cursor = getCursor(query);
         	getActivity().setTitle(getResources().getString(R.string.search_results, query));
-        } else if (query != null) {
+        } else */ 
+        if (query != null) {
            	cursor = getCursor(query);
            	getActivity().setTitle(getResources().getString(R.string.search_results, query));
-        } else if (intent.getStringExtra("com.gimranov.zandy.app.tag") != null) {
-        	String tag = intent.getStringExtra("com.gimranov.zandy.app.tag");
+//        } else if (intent.getStringExtra("com.gimranov.zandy.app.tag") != null) {
+        } else if (tag != null) {
+//        	String tag = intent.getStringExtra("com.gimranov.zandy.app.tag");
         	Query q = new Query();
         	q.set("tag", tag);
         	cursor = getCursor(q);
         	getActivity().setTitle(getResources().getString(R.string.tag_viewing_items, tag));
      	} else {
-	        collectionKey = intent.getStringExtra("com.gimranov.zandy.app.collectionKey");
+     	    if (null == collectionKey) // workaround until fragment is properly created by ItemActivity
+     	       collectionKey = intent.getStringExtra("com.gimranov.zandy.app.collectionKey");
 	        if (collectionKey != null) {
 	        	ItemCollection coll = ItemCollection.load(collectionKey, db);
 	        	cursor = getCursor(coll);
@@ -213,22 +225,7 @@ public class ItemFragment extends ListFragment {
 	
     @Override
     public void onCreateOptionsMenu(Menu menu, MenuInflater inflater) {
-        inflater.inflate(R.menu.zotero_menu, menu);
-
-        // Turn on sort item
-        MenuItem sort = menu.findItem(R.id.do_sort);
-        sort.setEnabled(true);
-        sort.setVisible(true);
-        
-        // Turn on search item
-        MenuItem search = menu.findItem(R.id.do_search);
-        search.setEnabled(true);
-        search.setVisible(true);
-        
-        // Turn on identifier item
-        MenuItem identifier = menu.findItem(R.id.do_identifier);
-        identifier.setEnabled(true);
-        identifier.setVisible(true);
+        inflater.inflate(R.menu.items_menu, menu);
     }
     
     @Override
@@ -236,51 +233,7 @@ public class ItemFragment extends ListFragment {
         DialogFragment newFragment = null;
         // Handle item selection
         switch (item.getItemId()) {
-        case android.R.id.home:
-            // app icon in action bar clicked; go home
-            Intent intent = new Intent(getActivity(), CollectionActivity.class);
-            intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP);
-            startActivity(intent);
-            return true;
-        case R.id.do_sync:
-        	if (!ServerCredentials.check(getActivity().getBaseContext())) {
-            	Toast.makeText(getActivity().getBaseContext(), getResources().getString(R.string.sync_log_in_first), 
-        				Toast.LENGTH_SHORT).show();
-            	return true;
-        	}
-        	// Make this a collection-specific sync, preceding by de-dirtying
-        	// De-dirtying
-        	Item.queue(db);
-        	APIRequest[] reqs = new APIRequest[Item.queue.size() + 1];
-        	for (int j = 0; j < Item.queue.size(); j++) {
-        		Log.d(TAG, "Adding dirty item to sync: "+Item.queue.get(j).getTitle());
-        		reqs[j] = ServerCredentials.prep(getActivity().getBaseContext(), APIRequest.update(Item.queue.get(j)));
-        	}
-        	if (collectionKey == null) {
-            	Log.d(TAG, "Adding sync request for all items");
-            	APIRequest req = new APIRequest(ServerCredentials.APIBASE 
-            			+ ServerCredentials.prep(getActivity().getBaseContext(), ServerCredentials.ITEMS +"/top"),
-            			"get", null);
-    			req.disposition = "xml";
-    			reqs[Item.queue.size()] = req;
-        	} else {
-            	Log.d(TAG, "Adding sync request for collection: " + collectionKey);
-            	APIRequest req = new APIRequest(ServerCredentials.APIBASE
-							+ ServerCredentials.prep(getActivity().getBaseContext(), ServerCredentials.COLLECTIONS)
-							+"/"
-							+ collectionKey + "/items",
-						"get",
-						null);
-    			req.disposition = "xml";
-    			reqs[Item.queue.size()] = req;
-        	}
-        	// This then provides a full queue, with the locally dirty items first, followed
-        	// by a scoped sync. Cool!
-			new ZoteroAPITask(getActivity().getBaseContext(), (CursorAdapter) getListAdapter()).execute(reqs);
-        	Toast.makeText(getActivity().getApplicationContext(), getResources().getString(R.string.sync_started), 
-    				Toast.LENGTH_SHORT).show();
-            return true;
-        case R.id.do_new:
+        case R.id.do_new_item:
             newFragment = new AlertDialogFragment(DIALOG_NEW);
             newFragment.show(getFragmentManager(), "DIALOG_NEW");
             return true;
@@ -291,11 +244,6 @@ public class ItemFragment extends ListFragment {
         case R.id.do_search:
         	getActivity().onSearchRequested(); // FIXME add search back to items list
             return true;
-        case R.id.do_prefs:
-	    	Intent i = new Intent(getActivity().getBaseContext(), SettingsActivity.class);
-	    	Log.d(TAG, "Intent for class:  "+i.getClass().toString());
-	    	startActivity(i);
-	    	return true;
         case R.id.do_sort:
             newFragment = new AlertDialogFragment(DIALOG_SORT);
             newFragment.show(getFragmentManager(), "DIALOG_SORT");
@@ -308,6 +256,14 @@ public class ItemFragment extends ListFragment {
     /* Sorting */
 	public void setSortBy(String sort) {
 		this.sortBy = sort;
+		ItemAdapter adapter = (ItemAdapter) getListAdapter();
+		String[] s = sort.split("[\\s,]+");
+		adapter.setField(s[0]);
+		// http://stackoverflow.com/questions/3898749/re-index-refresh-a-sectionindexer
+		// The following does not work
+		// TODO We shall replace fragment with new one without adding to stack
+        getListView().setFastScrollEnabled(false);
+        getListView().setFastScrollEnabled(true);
 	}
 	
 	/* Handling the ListView and keeping it up to date */
@@ -378,6 +334,17 @@ public class ItemFragment extends ListFragment {
 					"Scan canceled or failed", 
     				Toast.LENGTH_SHORT).show();
 		}
+	}
+	
+    /**
+     * Shows given collection when shown along with collections list
+     * @param collectionKey
+     * @return
+     */
+	public void showCollection(String collectionKey) {
+	    this.collectionKey = collectionKey;
+        ItemAdapter adapter = (ItemAdapter) getListAdapter();
+        adapter.changeCursor(prepareCursor());
 	}
 	
 	final Handler handler = new Handler() {

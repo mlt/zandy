@@ -34,7 +34,6 @@ import android.view.MenuItem;
 import android.view.View;
 import android.view.ViewGroup;
 import android.webkit.WebView;
-import android.webkit.WebViewClient;
 import android.widget.AdapterView;
 import android.widget.AdapterView.OnItemClickListener;
 import android.widget.AdapterView.OnItemLongClickListener;
@@ -63,15 +62,7 @@ public class ItemDataActivity extends ListActivity {
 	public Item item;
 	private Database db;
 
-	private class HelloWebViewClient extends WebViewClient {
-	    @Override
-	    public boolean shouldOverrideUrlLoading(WebView view, String url) {
-	        view.loadUrl(url);
-	        return true;
-	    }
-	}
-	
-    /** Called when the activity is first created. */
+	/** Called when the activity is first created. */
     @Override
     public void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
