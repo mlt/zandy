@@ -21,7 +21,7 @@ import android.database.Cursor;
 import android.view.LayoutInflater;
 import android.view.View;
 import android.view.ViewGroup;
-import android.widget.ResourceCursorAdapter;
+import android.support.v4.widget.ResourceCursorAdapter;
 import android.widget.TextView;
 
 import com.gimranov.zandy.app.R;
@@ -38,7 +38,7 @@ public class CollectionAdapter extends ResourceCursorAdapter {
 	public Context context;
 		
 	public CollectionAdapter(Context context, Cursor cursor) {
-		super(context, R.layout.list_collection, cursor, false);
+		super(context, R.layout.list_collection, cursor, 0);
 		this.context = context;
 	}
 	

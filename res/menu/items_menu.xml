@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  This file is part of Zandy.
+  
+  Zandy is free software: you can redistribute it and/or modify
+  it under the terms of the GNU Affero General Public License as published by
+  the Free Software Foundation, either version 3 of the License, or
+  (at your option) any later version.
+  
+  Zandy is distributed in the hope that it will be useful,
+  but WITHOUT ANY WARRANTY; without even the implied warranty of
+  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+  GNU Affero General Public License for more details.
+  
+  You should have received a copy of the GNU Affero General Public License
+  along with Zandy.  If not, see <http://www.gnu.org/licenses/>.
+-->
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:id="@+id/do_delete"
+          android:icon="@drawable/glyphish_22_skull_n_bones"
+          android:title="@string/menu_delete"
+          android:enabled="false"
+          android:visible="false" />
+    <item android:id="@+id/do_identifier"
+          android:icon="@drawable/glyphish_195_barcode"
+          android:title="@string/menu_identifier" />
+    <item android:id="@+id/do_sort"
+          android:icon="@drawable/glyphish_104_index_cards"
+          android:title="@string/menu_sort" />
+    <item android:id="@+id/do_search"
+          android:icon="@drawable/glyphish_151_telescope"
+          android:title="@string/menu_search" />    
+    <item android:id="@+id/do_new_item"
+          android:icon="@drawable/glyphish_10_medical"
+          android:title="@string/menu_new_item" />
+</menu>

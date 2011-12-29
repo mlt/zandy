@@ -20,6 +20,7 @@
     <string name="applicationTitle">Zandy: A Zotero Client for Android</string>
     <string name="menu_sync">Sync</string>
     <string name="menu_new">New</string>
+    <string name="menu_new_item">New item</string>
     <string name="menu_delete">Delete</string>
     <string name="menu_sort">Sort</string>
     <string name="menu_prefs">Settings</string>
