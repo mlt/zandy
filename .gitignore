@@ -1,5 +1,5 @@
 assets/*
 bin/*
 gen/*
-.classpath
+app/.classpath
 project.properties
