@@ -32,6 +32,20 @@
     <string name="search_hint">Search items</string>
     <string name="choose_parent_collection">Choose parent collection</string>
     <string name="status">Status:</string>
+    <!-- Scanning / add by identifier -->
+    <string name="scan">Scan</string>
+    <!-- we use menu_search here too -->
+    <string name="identifier_message">Look up item by identifier</string>
+    <string name="identifier_hint">Enter identifier</string>
+    <string name="identifier_looking_up">Looking up item&#8230;</string>
+    <string name="identifier_lookup_failed">Error fetching metadata</string>
+    <string name="identifier_processing">Parsing item data&#8230;</string>
+    <string name="identifier_scan_failed">Scan cancelled or failed.</string>
+    <!-- Sorting -->
+    <string name="sort_year_title">Year, then title</string>
+    <string name="sort_creator_year">Creator, then year</string>
+    <string name="sort_title_year">Title, then year</string>
+    <string name="sort_modified_title">Date modified, then title</string>
     <!-- ItemActivity (item lists) -->
     <string name="all_items">All items</string>
     <string name="cant_open_item">Can\'t open %s</string>
@@ -57,7 +71,8 @@
     <string name="attachment_zfs_local">Downloaded</string>
     <string name="attachment_unknown">Status unknown</string>
     <string name="attachment_downloading">Downloading attachment for %s</string>
-    <string name="attachment_unzipping">Unzipping...</string>
+    <string name="attachment_unzipping">Unzipping&#8230;</string>
+    <string name="attachment_no_download_url">No download URL for attachment. Try syncing again.</string>
 	<string name="attachment_download_initiated">File download initiated.</string>
 	<string name="attachment_download_failed">File download may have failed; try again.</string>
 	<string name="attachment_intent_failed">No application available to open files of type %s.</string>
@@ -83,9 +98,14 @@
 	<string name="collection_remove_item">Remove item</string>
 	<!-- Syncing -->
 	<string name="sync_log_in_first">Log in to sync</string>
-	<string name="sync_started">Started syncing...</string>
+	<string name="sync_started">Started syncing&#8230;</string>
 	<string name="sync_collection">Started syncing; refreshing collection list</string>
-	<!-- Settings -->
+	<string name="sync_error">Synchronization error</string>
+	<string name="sync_complete">Synchronization complete</string>
+	<string name="sync_queued_more">Added %1$d requests to queue</string>
+	<string name="sync_no_queued">No pending requests.</string>
+	<string name="sync_pending_requests">Pending Requests</string>
+		<!-- Settings -->
 	<string name="settings_basic">Basic</string>
 	<string name="settings_aggressive_syncing">Aggressive Syncing</string>
 	<string name="settings_aggressive_syncing_desc">Check to have Zandy attempt to keep all collections synced</string>
@@ -102,6 +122,13 @@
 	<string name="settings_webdav_username_desc">Username for WebDAV server. This is separate from your Zotero username.</string>
 	<string name="settings_webdav_password">Password</string>
 	<string name="settings_webdav_password_desc">Password for WebDAV server. This is separate from your Zotero password.</string>
+	<string name="settings_reset_database">Clear local database</string>
+	<string name="settings_reset_database_warning">Are you sure you want to erase all local data? This cannot be undone.</string>
+    <string name="settings_read_only">Read-Only Mode</string>
+    <string name="settings_read_only_desc">Check to prevent Zandy from making modifications to data on the Zotero servers.</string>
+    <string name="settings_webdav_ssl_override">Override SSL</string>
+    <string name="settings_webdav_ssl_override_desc">Check to skip SSL certificate checking, for servers using self-signed SSL certificates.</string>
+    	
 	<!-- Zotero terms -->
     <string name="note">Note</string>
     <string name="note_for_item">Note for %s</string>

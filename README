@@ -5,10 +5,10 @@ Installation:
 A built and signed version of Zandy is available for purchase on the Android Market (https://market.android.com/details?id=com.gimranov.zandy.app). You can also check out this project and built an APK yourself using Eclipse with the ADT plugin, or another alternate toolchain. Note that you will need to add the oauth-signpost libraries to your classpath to build the application.
 
 Requirements:
-Android 2.2 or later, although there are plans to support earlier versions of Android.
+Android 2.1 or later.
 
 Support:
-See the Zandy User Guide (http://www.gimranov.com/avram/w/zandy-user-guide) for basic documentation. Feature requests and bug reports are highly encouraged-- please post to the issue tracker on GitHub, or post comments to the user guide. Also feel free to write to zandy@gimranov.com with questions.
+See the Zandy User Guide (http://www.gimranov.com/avram/w/zandy-user-guide) for basic documentation. Feature requests and bug reports are highly encouraged-- please post to the issue tracker on GitHub or to the Zandy user forum (http://www.gimranov.com/forum). Also feel free to write to zandy@gimranov.com with questions.
 
 License:
 GNU Affero General Public License, Version 3 or later.
@@ -20,3 +20,4 @@ Icons from Glyphish's free icon set (http://glyphish.com/) are used for some but
 Dependencies:
 Requires oauth-signpost (http://code.google.com/p/oauth-signpost/) for OAuth support, licensed under the Apache license, version 2.
 Bar code scanning requires that the ZXing Bar Code Scanner app be installed. Zandy includes an integration file from the ZXing project (http://code.google.com/p/zxing/), licensed under the Apache license, version 2.
+Also requires the Android Compatibility Library, which Zandy uses to enable Android 2.1 support.

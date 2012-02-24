@@ -59,6 +59,7 @@ public class MainActivity extends Activity implements OnClickListener {
 	static final int DIALOG_CHOOSE_COLLECTION = 1;
 	
 	private Database db;
+	private Bundle b = new Bundle();
 	
 	/** Called when the activity is first created. */
 	@Override
@@ -86,8 +87,8 @@ public class MainActivity extends Activity implements OnClickListener {
 			Bundle b = new Bundle();
 			b.putString("url", extras.getString("android.intent.extra.TEXT"));
 			b.putString("title", extras.getString("android.intent.extra.SUBJECT"));
-			
-			showDialog(DIALOG_CHOOSE_COLLECTION, b);
+			this.b = b;
+			showDialog(DIALOG_CHOOSE_COLLECTION);
 		}
 
 		setContentView(R.layout.main);
@@ -204,8 +205,8 @@ public class MainActivity extends Activity implements OnClickListener {
 				Bundle b = new Bundle();
 				b.putString("url", extras.getString("android.intent.extra.TEXT"));
 				b.putString("title", extras.getString("android.intent.extra.SUBJECT"));
-				
-				showDialog(DIALOG_CHOOSE_COLLECTION, b);
+				this.b=b;
+				showDialog(DIALOG_CHOOSE_COLLECTION);
 				return;
 			}
 		
@@ -277,7 +278,7 @@ public class MainActivity extends Activity implements OnClickListener {
 			} catch (OAuthExpectationFailedException e) {
 				Toast.makeText(this, e.getMessage(), Toast.LENGTH_LONG).show();
 			} catch (OAuthCommunicationException e) {
-				Toast.makeText(this, e.getMessage(), Toast.LENGTH_LONG).show();
+				Toast.makeText(this, "Error communicating with server. Check your time settings, network connectivity, and try again. OAuth error: "+e.getMessage(), Toast.LENGTH_LONG).show();
 			}
 		}
 	}
@@ -304,17 +305,14 @@ public class MainActivity extends Activity implements OnClickListener {
 				return true;
 			}
         	Log.d(TAG, "Making sync request for all collections");
-        	APIRequest req = new APIRequest(ServerCredentials.APIBASE 
-        			+ ServerCredentials.prep(getBaseContext(), ServerCredentials.COLLECTIONS),
-        			"get", null);
-			req.disposition = "xml";
+        	ServerCredentials cred = new ServerCredentials(getBaseContext());
+        	APIRequest req = APIRequest.fetchCollections(cred);
 			new ZoteroAPITask(getBaseContext()).execute(req);
 			Toast.makeText(getApplicationContext(), getResources().getString(R.string.sync_started),
 					Toast.LENGTH_SHORT).show();
 			return true;
 		case R.id.do_prefs:
-			//startActivity(new Intent(this, SettingsActivity.class));
-			startActivity(new Intent(this, LookupActivity.class));
+			startActivity(new Intent(this, SettingsActivity.class));
 			return true;
         case R.id.do_search:
         	onSearchRequested();
@@ -324,7 +322,7 @@ public class MainActivity extends Activity implements OnClickListener {
 		}
 	}
 	
-	protected Dialog onCreateDialog(int id, Bundle b) {
+	protected Dialog onCreateDialog(int id) {
 		final String url = b.getString("url");
 		final String title = b.getString("title");
 		AlertDialog dialog;

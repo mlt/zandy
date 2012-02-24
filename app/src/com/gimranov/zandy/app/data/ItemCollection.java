@@ -80,15 +80,10 @@ public class ItemCollection extends HashSet<Item> {
 	public String dirty;
 	
 	/**
-	 * Timestamp of last update from server
+	 * Timestamp of last update from server; this is an Atom-formatted
+	 * timestamp
 	 */
 	private String timestamp;
-	
-	/**
-	 * APIRequests for changes that need to be propagated to the server. Not sure when these will get done.
-	 */
-	public static ArrayList<APIRequest> additions = new ArrayList<APIRequest>();
-	public static ArrayList<APIRequest> removals = new ArrayList<APIRequest>();
 			
 	public ItemCollection(String title) {
 		setTitle(title);
@@ -102,13 +97,22 @@ public class ItemCollection extends HashSet<Item> {
 	 * We call void remove(Item) to allow for queueing
 	 * the action for application on the server, via the API.
 	 * 
-	 * XXX If the API request isn't executed before GC gets it, we
-	 * will lose it!
+	 * When fromAPI is not true, queues a collection membership
+	 * request for the server as well.
+	 * 
+	 * @param item
+	 * @param fromAPI	False for collection memberships we receive from the server
+	 * @param db
 	 */
-	public boolean remove(Item item, Database db) {
+	public boolean remove(Item item, boolean fromAPI, Database db) {
 		String[] args = {dbId, item.dbId};
 		db.rawQuery("delete from itemtocollections where collection_id=? and item_id=?", args);
-		removals.add(APIRequest.remove(item, this));
+		
+		if (!fromAPI) {
+			APIRequest req = APIRequest.remove(item, this);
+			req.status = APIRequest.REQ_NEW;
+			req.save(db);
+		}
 		super.remove(item);
 		return true;
 	}
@@ -197,11 +201,22 @@ public class ItemCollection extends HashSet<Item> {
 		dirty = APIRequest.API_CLEAN;
 	}
 	
-	public boolean add(Item item) {
-		return add(item, false);
+	public boolean add(Item item, Database db) {
+		return add(item, false, db);
 	}
 	
-	public boolean add(Item item, boolean fromAPI) {
+	/**
+	 * Adds the specified item to this collection.
+	 * 
+	 * When fromAPI is not true, queues a collection membership
+	 * request for the server as well.
+	 * 
+	 * @param item
+	 * @param fromAPI	False for collection memberships we receive from the server
+	 * @param db
+	 * @return		Whether this is a new item for the collection
+	 */
+	public boolean add(Item item, boolean fromAPI, Database db) {
 		for (Item i : this) {
 			if(i.equals(item)) {
 				Log.d(TAG, "Item already in collection");
@@ -211,8 +226,28 @@ public class ItemCollection extends HashSet<Item> {
 		
 		super.add(item);
 		Log.d(TAG, "Item added to collection");
-		if (!fromAPI) additions.add(APIRequest.add(item, this));
+		if (!fromAPI) {
+			Log.d(TAG, "Saving new collection membership request to database");
+			APIRequest req = APIRequest.add(item, this);
+			req.status = APIRequest.REQ_NEW;
+			req.save(db);
+		}
 		return true;
+	}
+	
+	/**
+	 * Returns ArrayList of Item objects not in the specified ArrayList of item keys. Used for determining
+	 * when items have been deleted from a collection.
+	 */
+	public ArrayList<Item> notInKeys(ArrayList<String> keys) {
+		ArrayList<Item> notThere = new ArrayList<Item>();
+		
+		for (Item i : this) {
+			if (!keys.contains(i.getKey()))
+				notThere.add(i);
+		}
+		
+		return notThere;
 	}
 	
 	/**
@@ -384,10 +419,8 @@ public class ItemCollection extends HashSet<Item> {
 		
 		do {
 			ItemCollection collection = load(cur);
-			/* XXX Someone experienced a NullPointerException in this method,
-			 * maybe here? Seems to point to cursor issues in general. */
 			if (collection == null) {
-				Log.w(TAG, "Got a null collection when loading from cursor, in getSubcollections");
+				Log.e(TAG, "Got a null collection when loading from cursor, in getSubcollections");
 				continue;
 			}
 			Log.d(TAG,"Found subcollection: " + collection.title);

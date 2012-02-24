@@ -65,6 +65,11 @@ public class ItemDataActivity extends ExpandableListActivity {
 	
 	public Item item;
 	private Database db;
+
+	/**
+	 * For Bundle passing to Dialogs in API <= 7
+	 */
+	protected Bundle b = new Bundle();
 	
     /** Called when the activity is first created. */
     @Override
@@ -109,28 +114,28 @@ public class ItemDataActivity extends ExpandableListActivity {
 			@Override
 			public boolean onChildClick(ExpandableListView parent, View v,
 					int groupPosition, int childPosition, long id) {
-				Log.d(TAG, "child click");
-				return false;
+				return true;
 			}        	
         });
         lv.setOnGroupClickListener(new ExpandableListView.OnGroupClickListener() {
         	// Warning here because Eclipse can't tell whether my ArrayAdapter is
         	// being used with the correct parametrization.
 			public boolean onGroupClick(ExpandableListView parent, View view, int position, long id) {
-     			Log.d(TAG, "group clicked");
 				// If we have a click on an entry, do something...
         		BundleListAdapter adapter = (BundleListAdapter) parent.getExpandableListAdapter();
         		Bundle row = adapter.getGroup(position);
         		if (row.getString("label").equals("url")) {
         			row.putString("url", row.getString("content"));
         			removeDialog(DIALOG_CONFIRM_NAVIGATE);
-        			showDialog(DIALOG_CONFIRM_NAVIGATE, row);
+        			ItemDataActivity.this.b = row;
+        			showDialog(DIALOG_CONFIRM_NAVIGATE);
         			return true;
         		} else if (row.getString("label").equals("DOI")) {
         			String url = "http://dx.doi.org/"+Uri.encode(row.getString("content"));
         			row.putString("url", url);
         			removeDialog(DIALOG_CONFIRM_NAVIGATE);
-        			showDialog(DIALOG_CONFIRM_NAVIGATE, row);
+        			ItemDataActivity.this.b = row;
+        			showDialog(DIALOG_CONFIRM_NAVIGATE);
         			return true;
         		}  else if (row.getString("label").equals("creators")) {
         	    	Log.d(TAG, "Trying to start creators activity");
@@ -157,8 +162,12 @@ public class ItemDataActivity extends ExpandableListActivity {
 	    	    	startActivity(i);
 	    			return true;
 	    		}
-				Toast.makeText(getApplicationContext(), row.getString("content"), 
-        				Toast.LENGTH_SHORT).show();
+        		// Suppress toast if we're going to expand the view anyway
+        		if (!"abstractNote".equals(row.getSerializable("label"))) {
+					Toast.makeText(getApplicationContext(), row.getString("content"), 
+	        				Toast.LENGTH_SHORT).show();
+	        	}
+        		return false;
         		return false;
         	}
         });
@@ -170,7 +179,6 @@ public class ItemDataActivity extends ExpandableListActivity {
         	@Override
 			public void onCreateContextMenu(ContextMenu menu, View view,
 					ContextMenuInfo menuInfo) {
-     			Log.d(TAG, "contxt menu");
         		ExpandableListView.ExpandableListContextMenuInfo info =
         				(ExpandableListView.ExpandableListContextMenuInfo) menuInfo;
         		int type = ExpandableListView.getPackedPositionType(info.packedPosition);
@@ -207,14 +215,15 @@ public class ItemDataActivity extends ExpandableListActivity {
             			return;
             		}
         			removeDialog(DIALOG_SINGLE_VALUE);
-            		showDialog(DIALOG_SINGLE_VALUE, row);
+        			ItemDataActivity.this.b = row;
+            		showDialog(DIALOG_SINGLE_VALUE);
             		return;
         		}
 			}
           });
     }
     
-	protected Dialog onCreateDialog(int id, Bundle b) {
+	protected Dialog onCreateDialog(int id) {
 		final String label = b.getString("label");
 		final String itemKey = b.getString("itemKey");
 		final String content = b.getString("content");
@@ -365,7 +374,8 @@ public class ItemDataActivity extends ExpandableListActivity {
         	Bundle b = new Bundle();
         	b.putString("itemKey",item.getKey());
 			removeDialog(DIALOG_CONFIRM_DELETE);
-    		showDialog(DIALOG_CONFIRM_DELETE, b);
+			this.b = b;
+    		showDialog(DIALOG_CONFIRM_DELETE);
         	return true;
         default:
             return super.onOptionsItemSelected(i);
@@ -411,7 +421,6 @@ public class ItemDataActivity extends ExpandableListActivity {
 
         public View getChildView(int groupPosition, int childPosition, boolean isLastChild,
                 View convertView, ViewGroup parent) {
-        	Log.d(TAG, "childview: "+childPosition);
             TextView textView = getGenericView();
     		Bundle b = getGroup(groupPosition);
     		String label = b.getString("label");
@@ -438,10 +447,7 @@ public class ItemDataActivity extends ExpandableListActivity {
         }
 
         public View getGroupView(int groupPosition, boolean isExpanded, View convertView,
-                ViewGroup parent) {
-        	
-        	Log.d(TAG, "groupview: "+groupPosition);
-        	
+                ViewGroup parent) {        	
     		View row;
     		
     		Bundle b = getGroup(groupPosition);

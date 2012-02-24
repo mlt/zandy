@@ -21,6 +21,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
 import java.net.URLConnection;
+import java.util.ArrayList;
 
 import org.apache.http.util.ByteArrayBuffer;
 import org.json.JSONArray;
@@ -46,7 +47,6 @@ import android.view.MenuItem;
 import android.view.View;
 import android.widget.AdapterView;
 import android.widget.AdapterView.OnItemClickListener;
-import android.widget.CursorAdapter;
 import android.widget.EditText;
 import android.widget.ListView;
 import android.widget.TextView;
@@ -56,11 +56,11 @@ import com.gimranov.zandy.app.data.Database;
 import com.gimranov.zandy.app.data.Item;
 import com.gimranov.zandy.app.data.ItemAdapter;
 import com.gimranov.zandy.app.data.ItemCollection;
+import com.gimranov.zandy.app.task.APIEvent;
 import com.gimranov.zandy.app.task.APIRequest;
 import com.gimranov.zandy.app.task.ZoteroAPITask;
 import com.google.zxing.integration.android.IntentIntegrator;
 import com.google.zxing.integration.android.IntentResult;
-
 
 public class ItemActivity extends ListActivity {
 
@@ -72,6 +72,9 @@ public class ItemActivity extends ListActivity {
 	static final int DIALOG_IDENTIFIER = 3;
 	static final int DIALOG_PROGRESS = 6;
 
+	/**
+	 * Allowed sort orderings
+	 */
 	static final String[] SORTS = {
 		"item_year, item_title",
 		"item_creator, item_year",
@@ -79,13 +82,15 @@ public class ItemActivity extends ListActivity {
 		"timestamp ASC, item_title"
 	};
 
-	// XXX i8n
-	static final String[] SORTS_EN = {
-		"Year, then title",
-		"Creator, then year",
-		"Title, then year",
-		"Date modified, then title"
-	};	
+	/**
+	 * Strings providing the names of each ordering, respectively
+	 */
+	static final int[] SORT_NAMES = {
+		R.string.sort_year_title,
+		R.string.sort_creator_year,
+		R.string.sort_title_year,
+		R.string.sort_modified_title
+	};
 	
 	private String collectionKey;
 	private String query;
@@ -96,6 +101,93 @@ public class ItemActivity extends ListActivity {
 	
 	public String sortBy = "item_year, item_title";
 	
+	final Handler syncHandler = new Handler() {
+		public void handleMessage(Message msg) {
+			Log.d(TAG,"received message: "+msg.arg1);
+			refreshView();
+			
+			if (msg.arg1 == APIRequest.UPDATED_DATA) {
+				refreshView();
+				return;
+			}
+			
+			if (msg.arg1 == APIRequest.QUEUED_MORE) {
+				Toast.makeText(getApplicationContext(),
+						getResources().getString(R.string.sync_queued_more, msg.arg2), 
+        				Toast.LENGTH_SHORT).show();
+				return;
+			}
+			
+			if (msg.arg1 == APIRequest.BATCH_DONE) {
+				Toast.makeText(getApplicationContext(),
+						getResources().getString(R.string.sync_complete), 
+        				Toast.LENGTH_SHORT).show();
+				return;
+			}
+			
+			if (msg.arg1 == APIRequest.ERROR_UNKNOWN) {
+				Toast.makeText(getApplicationContext(),
+						getResources().getString(R.string.sync_error), 
+        				Toast.LENGTH_SHORT).show();
+				return;
+			}
+		}
+	};
+	
+    private APIEvent mEvent = new APIEvent() {
+		private int updates = 0;
+		
+		@Override
+		public void onComplete(APIRequest request) {
+			Message msg = syncHandler.obtainMessage();
+			msg.arg1 = APIRequest.BATCH_DONE;
+			syncHandler.sendMessage(msg);
+			Log.d(TAG, "fired oncomplete");
+		}
+
+		@Override
+		public void onUpdate(APIRequest request) {
+			updates++;
+			
+			if (updates % 10 == 0) {
+				Message msg = syncHandler.obtainMessage();
+				msg.arg1 = APIRequest.UPDATED_DATA;
+				syncHandler.sendMessage(msg);
+			} else {
+				// do nothing
+			}
+		}
+
+		@Override
+		public void onError(APIRequest request, Exception exception) {
+			Log.e(TAG, "APIException caught", exception);
+			Message msg = syncHandler.obtainMessage();
+			msg.arg1 = APIRequest.ERROR_UNKNOWN;
+			syncHandler.sendMessage(msg);
+		}
+
+		@Override
+		public void onError(APIRequest request, int error) {
+			Log.e(TAG, "API error caught");
+			Message msg = syncHandler.obtainMessage();
+			msg.arg1 = APIRequest.ERROR_UNKNOWN;
+			syncHandler.sendMessage(msg);
+		}
+	};
+
+	protected Bundle b = new Bundle();
+	
+	/**
+	 * Refreshes the current list adapter
+	 */
+	private void refreshView() {
+		ItemAdapter adapter = (ItemAdapter) getListAdapter();
+		Cursor newCursor = prepareCursor();
+		adapter.changeCursor(newCursor);
+		adapter.notifyDataSetChanged();
+		Log.d(TAG, "refreshing view on request");
+	}
+	
     /** Called when the activity is first created. */
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -105,7 +197,44 @@ public class ItemActivity extends ListActivity {
 		
         setContentView(R.layout.items);
 
+        Intent intent = getIntent();
+        collectionKey = intent.getStringExtra("com.gimranov.zandy.app.collectionKey");
+
+        ItemCollection coll = ItemCollection.load(collectionKey, db);
+       	APIRequest req;
+
+        if (coll != null) {        	
+       		req = APIRequest.fetchItems(coll, false, 
+       				new ServerCredentials(this));
+        } else {        	
+       		req = APIRequest.fetchItems(false, 
+       				new ServerCredentials(this));
+        }
+
         prepareAdapter();
+        
+		ItemAdapter adapter = (ItemAdapter) getListAdapter();
+		Cursor cur = adapter.getCursor();
+		
+		if (intent.getBooleanExtra("com.gimranov.zandy.app.rerequest", false)
+				|| cur == null
+				|| cur.getCount() == 0) {
+			
+        	if (!ServerCredentials.check(getBaseContext())) {
+            	Toast.makeText(getBaseContext(), getResources().getString(R.string.sync_log_in_first), 
+        				Toast.LENGTH_SHORT).show();
+            	return;
+        	}
+        	
+    		Toast.makeText(this,
+    				getResources().getString(R.string.collection_empty),
+    				Toast.LENGTH_SHORT).show();
+			Log.d(TAG, "Running a request to populate missing items");
+    		ZoteroAPITask task = new ZoteroAPITask(this);
+    		req.setHandler(mEvent);
+    		task.execute(req);
+
+		}        
         
         ListView lv = getListView();
         lv.setOnItemClickListener(new OnItemClickListener() {
@@ -174,8 +303,11 @@ public class ItemActivity extends ListActivity {
         	this.setTitle(getResources().getString(R.string.tag_viewing_items, tag));
      	} else {
 	        collectionKey = intent.getStringExtra("com.gimranov.zandy.app.collectionKey");
+
+	        ItemCollection coll;
+
 	        if (collectionKey != null) {
-	        	ItemCollection coll = ItemCollection.load(collectionKey, db);
+	        	coll = ItemCollection.load(collectionKey, db);
 	        	cursor = getCursor(coll);
 	        	this.setTitle(coll.getTitle());
 	        } else {
@@ -186,7 +318,7 @@ public class ItemActivity extends ListActivity {
         return cursor;
     }
     
-	protected Dialog onCreateDialog(int id, Bundle b) {
+	protected Dialog onCreateDialog(int id) {
 		switch (id) {
 		case DIALOG_NEW:
 			AlertDialog.Builder builder = new AlertDialog.Builder(this);
@@ -215,10 +347,16 @@ public class ItemActivity extends ListActivity {
 			AlertDialog dialog = builder.create();
 			return dialog;
 		case DIALOG_SORT:
+			
+			// We generate the sort name list for our current locale
+			String[] sorts = new String[SORT_NAMES.length];
+			for (int j = 0; j < SORT_NAMES.length; j++) {
+				sorts[j] = getResources().getString(SORT_NAMES[j]);
+			}
+			
 			AlertDialog.Builder builder2 = new AlertDialog.Builder(this);
 			builder2.setTitle(getResources().getString(R.string.set_sort_order))
-					// XXX i18n
-		    	    .setItems(SORTS_EN, new DialogInterface.OnClickListener() {
+		    	    .setItems(sorts, new DialogInterface.OnClickListener() {
 						public void onClick(DialogInterface dialog, int pos) {
 							Cursor cursor;
 							setSortBy(SORTS[pos]);
@@ -240,21 +378,18 @@ public class ItemActivity extends ListActivity {
 			mProgressDialog = new ProgressDialog(this);
 			mProgressDialog.setProgressStyle(ProgressDialog.STYLE_SPINNER);
 			mProgressDialog.setIndeterminate(true);
-			// XXX i18n
-			mProgressDialog.setMessage("Looking up item...");
+			mProgressDialog.setMessage(getResources().getString(R.string.identifier_looking_up));
 			return mProgressDialog;
 		case DIALOG_IDENTIFIER:
 			final EditText input = new EditText(this);
-			// XXX i18n
-			input.setHint("Enter identifier");
+			input.setHint(getResources().getString(R.string.identifier_hint));
 			
 			final ItemActivity current = this;
 			
 			dialog = new AlertDialog.Builder(this)
-				// XXX i18n
-	    	    .setTitle("Look up item by identifier")
+	    	    .setTitle(getResources().getString(R.string.identifier_message))
 	    	    .setView(input)
-	    	    .setPositiveButton("Search", new DialogInterface.OnClickListener() {
+	    	    .setPositiveButton(getResources().getString(R.string.menu_search), new DialogInterface.OnClickListener() {
 					public void onClick(DialogInterface dialog, int whichButton) {
 	    	            Editable value = input.getText();
 	    	            // run search
@@ -262,9 +397,10 @@ public class ItemActivity extends ListActivity {
 	    	            c.putString("mode", "isbn");
 	    	            c.putString("identifier", value.toString());
 	    	            removeDialog(DIALOG_PROGRESS);
-	    	            showDialog(DIALOG_PROGRESS, c);
+	    	            ItemActivity.this.b = c;
+	    	            showDialog(DIALOG_PROGRESS);
 	    	        }
-	    	    }).setNeutralButton("Scan", new DialogInterface.OnClickListener() {
+	    	    }).setNeutralButton(getResources().getString(R.string.scan), new DialogInterface.OnClickListener() {
 	    	        public void onClick(DialogInterface dialog, int whichButton) {
 	    	        		IntentIntegrator integrator = new IntentIntegrator(current);
 	    	        		integrator.initiateScan();
@@ -280,7 +416,7 @@ public class ItemActivity extends ListActivity {
 		}
 	}
     
-	protected void onPrepareDialog(int id, Dialog dialog, Bundle b) {
+	protected void onPrepareDialog(int id, Dialog dialog) {
 		switch(id) {
 		case DIALOG_PROGRESS:
 			Log.d(TAG, "_____________________dialog_progress_prepare");
@@ -320,35 +456,35 @@ public class ItemActivity extends ListActivity {
         				Toast.LENGTH_SHORT).show();
             	return true;
         	}
+        	
+			// Get credentials
+			ServerCredentials cred = new ServerCredentials(getBaseContext());
+			
         	// Make this a collection-specific sync, preceding by de-dirtying
-        	// De-dirtying
         	Item.queue(db);
-        	APIRequest[] reqs = new APIRequest[Item.queue.size() + 1];
-        	for (int j = 0; j < Item.queue.size(); j++) {
-        		Log.d(TAG, "Adding dirty item to sync: "+Item.queue.get(j).getTitle());
-        		reqs[j] = ServerCredentials.prep(getBaseContext(), APIRequest.update(Item.queue.get(j)));
-        	}
+			ArrayList<APIRequest> list = new ArrayList<APIRequest>();
+			APIRequest[] templ = {};
+	    	for (Item i : Item.queue) {
+        		Log.d(TAG, "Adding dirty item to sync: "+i.getTitle());
+	    		list.add(cred.prep(APIRequest.update(i)));
+	    	}
+        	
         	if (collectionKey == null) {
             	Log.d(TAG, "Adding sync request for all items");
-            	APIRequest req = new APIRequest(ServerCredentials.APIBASE 
-            			+ ServerCredentials.prep(getBaseContext(), ServerCredentials.ITEMS +"/top"),
-            			"get", null);
-    			req.disposition = "xml";
-    			reqs[Item.queue.size()] = req;
+            	APIRequest req = APIRequest.fetchItems(false, cred);
+    			req.setHandler(mEvent);
+    			list.add(req);
         	} else {
             	Log.d(TAG, "Adding sync request for collection: " + collectionKey);
-            	APIRequest req = new APIRequest(ServerCredentials.APIBASE
-							+ ServerCredentials.prep(getBaseContext(), ServerCredentials.COLLECTIONS)
-							+"/"
-							+ collectionKey + "/items",
-						"get",
-						null);
-    			req.disposition = "xml";
-    			reqs[Item.queue.size()] = req;
+            	APIRequest req = APIRequest.fetchItems(collectionKey, true, cred);
+            	req.setHandler(mEvent);
+            	list.add(req);
         	}
-        	// This then provides a full queue, with the locally dirty items first, followed
-        	// by a scoped sync. Cool!
-			new ZoteroAPITask(getBaseContext(), (CursorAdapter) getListAdapter()).execute(reqs);
+        	APIRequest[] reqs = list.toArray(templ);
+        	
+			ZoteroAPITask task = new ZoteroAPITask(getBaseContext());
+			task.setHandler(syncHandler);
+			task.execute(reqs);
         	Toast.makeText(getApplicationContext(), getResources().getString(R.string.sync_started), 
     				Toast.LENGTH_SHORT).show();
             return true;
@@ -436,18 +572,17 @@ public class ItemActivity extends ListActivity {
 				Log.d(TAG, b.getString("identifier"));
 				progressThread = new ProgressThread(handler, b);
 				progressThread.start();
+				this.b = b;
 				removeDialog(DIALOG_PROGRESS);			
-				showDialog(DIALOG_PROGRESS, b);
+				showDialog(DIALOG_PROGRESS);
 			} else {
-				// XXX i18n
 				Toast.makeText(getApplicationContext(),
-						"Scan canceled or failed", 
+						getResources().getString(R.string.identifier_scan_failed), 
 	    				Toast.LENGTH_SHORT).show();
 			}
 		} else {
-			// XXX i18n
 			Toast.makeText(getApplicationContext(),
-					"Scan canceled or failed", 
+					getResources().getString(R.string.identifier_scan_failed), 
     				Toast.LENGTH_SHORT).show();
 		}
 	}
@@ -479,14 +614,14 @@ public class ItemActivity extends ListActivity {
 			}
 			
 			if (ProgressThread.STATE_PARSING == msg.arg2) {
-				mProgressDialog.setMessage("Parsing item data...");
+				mProgressDialog.setMessage(getResources().getString(R.string.identifier_processing));
 				return;
 			}
 			
 			if (ProgressThread.STATE_ERROR == msg.arg2) {
 				dismissDialog(DIALOG_PROGRESS);
-				// XXX i18n
-				Toast.makeText(getBaseContext(), "Error fetching metadata", 
+				Toast.makeText(getApplicationContext(),
+						getResources().getString(R.string.identifier_lookup_failed), 
 	    				Toast.LENGTH_SHORT).show();
 				progressThread.setState(ProgressThread.STATE_DONE);
 				return;

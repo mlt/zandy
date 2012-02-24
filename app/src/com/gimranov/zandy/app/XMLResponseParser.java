@@ -36,6 +36,7 @@ import com.gimranov.zandy.app.data.Attachment;
 import com.gimranov.zandy.app.data.Database;
 import com.gimranov.zandy.app.data.Item;
 import com.gimranov.zandy.app.data.ItemCollection;
+import com.gimranov.zandy.app.task.APIEvent;
 import com.gimranov.zandy.app.task.APIRequest;
 
 public class XMLResponseParser extends DefaultHandler {
@@ -49,6 +50,9 @@ public class XMLResponseParser extends DefaultHandler {
 	private String updateType;
 	private String updateKey;
 	private boolean items = false;
+	private APIRequest request;
+	
+	public static boolean followNext = true;
 	
 	public static ArrayList<APIRequest> queue;
 	
@@ -64,10 +68,23 @@ public class XMLResponseParser extends DefaultHandler {
 	static final String ATOM_NAMESPACE = "http://www.w3.org/2005/Atom";
 	static final String Z_NAMESPACE = "http://zotero.org/ns/api";
 
-	public XMLResponseParser(InputStream in) {
+	public XMLResponseParser(InputStream in, APIRequest request) {
+		followNext = true;
 		input = in;
+		this.request = request;
 		// Initialize the request queue if needed
 		if (queue == null) queue = new ArrayList<APIRequest>();
+	}
+	
+	public XMLResponseParser(APIRequest request) {
+		followNext = true;
+		this.request = request;
+		// Initialize the request queue if needed
+		if (queue == null) queue = new ArrayList<APIRequest>();
+	}
+	
+	public void setInputStream(InputStream in) {
+		input = in;
 	}
 	
 	public void update(String type, String key) {
@@ -121,6 +138,7 @@ public class XMLResponseParser extends DefaultHandler {
 	            	if (rel.contains("next")) {
     					Log.d(TAG, "Found continuation: "+href);
 	            		APIRequest req = new APIRequest(href, "get", null);
+	            		req.query = href;
 	        			req.disposition = "xml";
 	        			queue.add(req);
 	            	}
@@ -178,15 +196,24 @@ public class XMLResponseParser extends DefaultHandler {
 	            				|| attachment.content.optInt("linkMode") == Attachment.MODE_IMPORTED_URL)
 	            			attachment.status = Attachment.AVAILABLE;
 	            		
-	            		// Don't touch ZFS status here
-	            		Attachment existing = Attachment.load(attachment.key, db);
-	            		if (existing != null) attachment.status = existing.status;
             			
 	            		if (!item.getType().equals("attachment")
-            					&& !item.getType().equals("note"))
+            					&& !item.getType().equals("note")) {
+	            			Item oldItem = Item.load(item.getKey(), db);
+	            			// Check timestamps to see if it's different; if not, we should
+	            			// stop following the Atom continuation links
+	            			if (oldItem != null && oldItem.getTimestamp().equals(item.getTimestamp())) {
+	            				followNext = false;
+	            			}
             				item.save(db);
-            			else
+	            		} else {
+	            			// Don't touch ZFS status here
+		            		Attachment existing = Attachment.load(attachment.key, db);
+		            		if (existing != null) {
+		            			attachment.status = existing.status;
+		            		}
             				attachment.save(db);
+	            		}
             		}
             		
             		if (!item.getType().equals("attachment")
@@ -199,8 +226,10 @@ public class XMLResponseParser extends DefaultHandler {
             		}
             		
             		// Add to containing collection
-                	if (!item.getType().equals("attachment") && parent != null) parent.add(item, true);
+                	if (!item.getType().equals("attachment") && parent != null) parent.add(item, true, db);
             		
+                	request.getHandler().onUpdate(request);
+                	
                 	Log.d(TAG, "Done parsing item entry.");
             		return;
             	}
@@ -231,6 +260,8 @@ public class XMLResponseParser extends DefaultHandler {
             			} else {
             				// Collection hasn't changed!
             				collection = ic;
+            				// We also don't need the next page, if we already saw this one
+            				followNext = false;
             			}
             		} else {
             			// This means that we haven't seen the collection before, so it must be
@@ -327,7 +358,7 @@ public class XMLResponseParser extends DefaultHandler {
             	item.setEtag(etag);
             	collection.setEtag(etag);
             	attachment.etag = etag;
-            	Log.d(TAG, etag);
+            	Log.d(TAG, "etag: "+etag);
             }
         });
         entry.getChild(ATOM_NAMESPACE, "content").setEndTextElementListener(new EndTextElementListener(){
@@ -355,7 +386,7 @@ public class XMLResponseParser extends DefaultHandler {
             	parent.save(db);
             }
             db.close();
-        } catch (Exception e) {
+		} catch (Exception e) {
         	throw new RuntimeException(e);
         }
     }

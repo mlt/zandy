@@ -22,6 +22,7 @@ import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.Authenticator;
+import java.net.MalformedURLException;
 import java.net.PasswordAuthentication;
 import java.net.URL;
 import java.net.URLConnection;
@@ -96,6 +97,11 @@ public class AttachmentActivity extends ListActivity {
 	private ProgressDialog mProgressDialog;
 	private ProgressThread progressThread;
 	private Database db;
+	
+	/** 
+	 * For <= Android 2.1 (API 7), we can't pass bundles to showDialog(), so set this instead
+	 */
+	private Bundle b = new Bundle();
 	
 	private ArrayList<File> tmpFiles;
 	
@@ -221,8 +227,10 @@ public class AttachmentActivity extends ListActivity {
         			if (linkMode == Attachment.MODE_IMPORTED_FILE
         					|| linkMode == Attachment.MODE_IMPORTED_URL) {
         				loadFileAttachment(b);
-        			} else
-        				showDialog(DIALOG_CONFIRM_NAVIGATE, b);
+        			} else {
+        				AttachmentActivity.this.b = b;
+        				showDialog(DIALOG_CONFIRM_NAVIGATE);
+        			}
 				}
         		
 				if (row.getType().equals("note")) {
@@ -231,7 +239,8 @@ public class AttachmentActivity extends ListActivity {
 					b.putString("itemKey", itemKey);
 					b.putString("content", row.content.optString("note", ""));
 					removeDialog(DIALOG_NOTE);
-					showDialog(DIALOG_NOTE, b);
+					AttachmentActivity.this.b = b;
+					showDialog(DIALOG_NOTE);
 				}
 				return true;
         	}
@@ -261,7 +270,7 @@ public class AttachmentActivity extends ListActivity {
     	super.onResume();
     }
     
-	protected Dialog onCreateDialog(int id, Bundle b) {
+	protected Dialog onCreateDialog(int id) {
 		final String attachmentKey = b.getString("attachmentKey");
 		final String itemKey = b.getString("itemKey");
 		final String content = b.getString("content");
@@ -358,7 +367,8 @@ public class AttachmentActivity extends ListActivity {
 	    	            b.putString("attachmentKey", attachmentKey);
 	    	            b.putString("itemKey", itemKey);
 	    	        	removeDialog(DIALOG_CONFIRM_DELETE);
-	    	        	showDialog(DIALOG_CONFIRM_DELETE, b);
+	    	        	AttachmentActivity.this.b = b;
+	    	        	showDialog(DIALOG_CONFIRM_DELETE);
 	    	        }
 	    	    });
 			}
@@ -376,7 +386,7 @@ public class AttachmentActivity extends ListActivity {
 		}
 	}
 	
-	protected void onPrepareDialog(int id, Dialog dialog, Bundle b) {
+	protected void onPrepareDialog(int id, Dialog dialog) {
 		switch(id) {
 		case DIALOG_FILE_PROGRESS:
 			mProgressDialog.setMessage(getResources().getString(R.string.attachment_downloading, b.getString("title")));
@@ -420,7 +430,8 @@ public class AttachmentActivity extends ListActivity {
 				// Zero-length or nonexistent gives length == 0
 				|| (attFile != null && attFile.length() == 0)) {				
 			Log.d(TAG,"Starting to try and download attachment (status: "+att.status+", fn: "+att.filename+")");
-			showDialog(DIALOG_FILE_PROGRESS, b);
+			this.b = b;
+			showDialog(DIALOG_FILE_PROGRESS);
 		} else showAttachment(att);
 	}
 	
@@ -430,10 +441,10 @@ public class AttachmentActivity extends ListActivity {
 	@SuppressWarnings("unchecked")
 	private void refreshView() {
 		ArrayAdapter<Attachment> la = (ArrayAdapter<Attachment>) getListAdapter();
-        la.clear();
-        for (Attachment at : Attachment.forItem(item, db)) {
-        	la.add(at);
-        }
+		la.clear();
+		for (Attachment at : Attachment.forItem(item, db)) {
+			la.add(at);
+		}
 	}
 	
 	final Handler handler = new Handler() {
@@ -445,6 +456,21 @@ public class AttachmentActivity extends ListActivity {
 				refreshView();
 				if (null != msg.obj)
 					showAttachment((Attachment)msg.obj);
+				break;
+			case ProgressThread.STATE_FAILED:
+				// Notify that we failed to get anything
+				Toast.makeText(getApplicationContext(),
+						getResources().getString(R.string.attachment_no_download_url), 
+	    				Toast.LENGTH_SHORT).show();
+	        	
+				if(mProgressDialog.isShowing())
+					dismissDialog(DIALOG_FILE_PROGRESS);
+				
+				// Let's try to fall back on an online version
+				AttachmentActivity.this.b = msg.getData();
+				showDialog(DIALOG_CONFIRM_NAVIGATE);
+				
+				refreshView();
 				break;
 			case ProgressThread.STATE_UNZIPPING:
 				mProgressDialog.setMax(msg.arg1);
@@ -468,6 +494,7 @@ public class AttachmentActivity extends ListActivity {
 		Handler mHandler;
 		Bundle arguments;
 		final static int STATE_DONE = 5;
+		final static int STATE_FAILED = 3;
 		final static int STATE_RUNNING = 1;
 		final static int STATE_UNZIPPING = 6;
 		
@@ -520,7 +547,18 @@ public class AttachmentActivity extends ListActivity {
 			}
 			
 			try {
-				url = new URL(urlstring);
+				try {
+					url = new URL(urlstring);
+				} catch (MalformedURLException e) {
+					// Alert that we don't have a valid download URL and return
+					Message msg = mHandler.obtainMessage();
+		        	msg.arg2 = STATE_FAILED;
+		        	msg.setData(arguments);
+		        	mHandler.sendMessage(msg);
+		        	
+		        	Log.e(TAG, "Download URL not valid: "+urlstring, e);
+		        	return;
+				}
 				//this is the downloader method
                 long startTime = System.currentTimeMillis();
                 Log.d(TAG, "download beginning");
@@ -593,11 +631,11 @@ public class AttachmentActivity extends ListActivity {
                             while ((current = entryStream.read()) != -1) {
                             	baf2.append((byte) current);
 
-								if (baf2.length() % 2048 == 0) {
-									msg = mHandler.obtainMessage();
-									msg.arg1 = baf2.length();
-									mHandler.sendMessage(msg);
-								}
+				if (baf2.length() % 2048 == 0) {
+					msg = mHandler.obtainMessage();
+					msg.arg1 = baf2.length();
+					mHandler.sendMessage(msg);
+				}
                             }
                             fos2.write(baf2.toByteArray());
                             fos2.close();
@@ -607,7 +645,7 @@ public class AttachmentActivity extends ListActivity {
                     	}
                     } while (entries.hasMoreElements());
                     zf.close();
-                	// We remove the file from the ArrayList if deletion succeeded;
+		    // We remove the file from the ArrayList if deletion succeeded;
                     // otherwise deletion is put off until the activity exits.
                     if (tmpFile.delete()) {
                     	tmpFiles.remove(tmpFile);
@@ -669,7 +707,8 @@ public class AttachmentActivity extends ListActivity {
 			b.putString("itemKey", this.item.getKey());
 			b.putString("mode", "new");
         	removeDialog(DIALOG_NOTE);
-        	showDialog(DIALOG_NOTE, b);
+        	this.b = b;
+        	showDialog(DIALOG_NOTE);
             return true;
         case R.id.do_prefs:
             startActivity(new Intent(this, SettingsActivity.class));

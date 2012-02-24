@@ -57,6 +57,8 @@ public class LookupActivity extends Activity implements OnClickListener {
 	private ProgressDialog mProgressDialog;
 	private ProgressThread progressThread;
 	private Database db;
+
+	private Bundle b = new Bundle();
 	
     /** Called when the activity is first created. */
     @Override
@@ -91,7 +93,8 @@ public class LookupActivity extends Activity implements OnClickListener {
 			Bundle b = new Bundle();
 			b.putString("mode", "isbn");
 			b.putString("identifier", fieldContents.toString());
-			showDialog(DIALOG_PROGRESS, b);
+			this.b = b;
+			showDialog(DIALOG_PROGRESS);
 		} else {
 			Log.w(TAG, "Uncaught click on: " + v.getId());
 		}
@@ -109,7 +112,7 @@ public class LookupActivity extends Activity implements OnClickListener {
     	super.onResume();
     }
     
-	protected Dialog onCreateDialog(int id, Bundle b) {
+	protected Dialog onCreateDialog(int id) {
 		switch (id) {			
 		case DIALOG_PROGRESS:
 			mProgressDialog = new ProgressDialog(this);
@@ -123,7 +126,7 @@ public class LookupActivity extends Activity implements OnClickListener {
 		}
 	}
 	
-	protected void onPrepareDialog(int id, Dialog dialog, Bundle b) {
+	protected void onPrepareDialog(int id, Dialog dialog) {
 		switch(id) {
 		case DIALOG_PROGRESS:
 			mProgressDialog.setProgress(0);
