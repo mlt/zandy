@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string-array name="sorts">
+        <item >Year, then title</item>
+        <item >Creator, then year</item>
+        <item >Title, then year</item>
+        <item >Date modified, then title</item>
+    </string-array>
+    
+</resources>

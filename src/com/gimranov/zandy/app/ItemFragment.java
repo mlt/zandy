@@ -21,6 +21,7 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.net.URL;
 import java.net.URLConnection;
+import java.util.Locale;
 
 import org.apache.http.util.ByteArrayBuffer;
 import org.json.JSONArray;
@@ -35,11 +36,14 @@ import android.app.ProgressDialog;
 import android.app.SearchManager;
 import android.content.DialogInterface;
 import android.content.Intent;
+import android.content.res.Configuration;
+import android.content.res.Resources;
 import android.database.Cursor;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Message;
 import android.text.Editable;
+import android.util.DisplayMetrics;
 import android.util.Log;
 import android.view.LayoutInflater;
 import android.support.v4.view.Menu;
@@ -74,7 +78,9 @@ public class ItemFragment extends ListFragment {
 	static final int DIALOG_SORT = 2;
 	static final int DIALOG_IDENTIFIER = 3;
 	static final int DIALOG_PROGRESS = 6;
-
+	
+//	static final String
+/*
 	static final String[] SORTS = {
 		"item_year, item_title",
 		"item_creator, item_year",
@@ -89,7 +95,7 @@ public class ItemFragment extends ListFragment {
 		"Title, then year",
 		"Date modified, then title"
 	};	
-	
+*/	
 	private String collectionKey;
 	private String query;
 	private String tag;
@@ -602,10 +608,16 @@ public class ItemFragment extends ListFragment {
 	            AlertDialog.Builder builder2 = new AlertDialog.Builder(getActivity());
 	            builder2.setTitle(getResources().getString(R.string.set_sort_order))
 	                    // XXX i18n
-	                    .setItems(SORTS_EN, new DialogInterface.OnClickListener() {
+	                    .setItems(R.array.sorts, new DialogInterface.OnClickListener() {
 	                        public void onClick(DialogInterface dialog, int pos) {
 	                            Cursor cursor;
-	                            setSortBy(SORTS[pos]);
+	                            Configuration conf = getResources().getConfiguration();
+	                            conf.locale = Locale.ROOT;
+	                            DisplayMetrics metrics = new DisplayMetrics();
+	                            getActivity().getWindowManager().getDefaultDisplay().getMetrics(metrics);
+	                            Resources resources = new Resources(getActivity().getAssets(), metrics, conf);
+	                            String sort = resources.obtainTypedArray(R.array.sorts).getString(pos);
+	                            setSortBy(sort);//SORTS[pos]);
 	                            if (collectionKey != null)
 	                                cursor = getCursor(ItemCollection.load(collectionKey, db));
 	                            else if (query != null)
@@ -614,7 +626,7 @@ public class ItemFragment extends ListFragment {
 	                                cursor = getCursor();
 	                            ItemAdapter adapter = (ItemAdapter) getListAdapter();
 	                            adapter.changeCursor(cursor);
-	                            Log.d(TAG, "Re-sorting by: "+SORTS[pos]);
+	                            Log.d(TAG, "Re-sorting by: "+sort);//SORTS[pos]);
 	                        }
 	                    });
 	            AlertDialog dialog2 = builder2.create();

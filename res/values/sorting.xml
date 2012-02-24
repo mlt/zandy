@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string-array name="sorts">
+        <item >item_year, item_title</item>
+        <item >item_creator, item_year</item>
+        <item >item_title, item_year</item>
+        <item >timestamp ASC, item_title</item>
+    </string-array>
+    
+</resources>
