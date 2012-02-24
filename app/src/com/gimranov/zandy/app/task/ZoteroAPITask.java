@@ -21,46 +21,34 @@
 
 package com.gimranov.zandy.app.task;
 
-import java.io.ByteArrayOutputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.net.URI;
-import java.net.URISyntaxException;
 import java.util.ArrayList;
 
-import org.apache.http.HttpEntity;
-import org.apache.http.HttpResponse;
-import org.apache.http.client.ClientProtocolException;
-import org.apache.http.client.HttpClient;
-import org.apache.http.client.methods.HttpDelete;
-import org.apache.http.client.methods.HttpGet;
-import org.apache.http.client.methods.HttpPost;
-import org.apache.http.client.methods.HttpPut;
-import org.apache.http.entity.StringEntity;
-import org.apache.http.impl.client.BasicResponseHandler;
-import org.apache.http.impl.client.DefaultHttpClient;
-import org.json.JSONArray;
-
 import android.content.Context;
-import android.content.SharedPreferences;
 import android.os.AsyncTask;
-import android.preference.PreferenceManager;
+import android.os.Handler;
+import android.os.Message;
 import android.util.Log;
-import android.widget.CursorAdapter;
 
 import com.gimranov.zandy.app.ServerCredentials;
 import com.gimranov.zandy.app.XMLResponseParser;
 import com.gimranov.zandy.app.data.Attachment;
 import com.gimranov.zandy.app.data.Database;
 import com.gimranov.zandy.app.data.Item;
-import com.gimranov.zandy.app.data.ItemCollection;
 
-public class ZoteroAPITask extends AsyncTask<APIRequest, Integer, JSONArray[]> {
+/**
+ * Executes one or more API requests asynchronously.
+ * 
+ * Steps in migration:
+ *  1. Move the logic on what kind of request is handled how into the APIRequest itself
+ *  2. Throw exceptions when we have errors
+ *  3. Call the handlers when provided
+ *  4. Move aggressive syncing logic out of ZoteroAPITask itself; it should be elsewhere.
+ * 
+ * @author ajlyon
+ *
+ */
+public class ZoteroAPITask extends AsyncTask<APIRequest, Message, Message> {
 	private static final String TAG = "com.gimranov.zandy.app.task.ZoteroAPITask";
-		
-	private String key;
-	private CursorAdapter adapter;
-	private String userID;
 	
 	public ArrayList<APIRequest> deletions;
 	public ArrayList<APIRequest> queue;
@@ -72,80 +60,70 @@ public class ZoteroAPITask extends AsyncTask<APIRequest, Integer, JSONArray[]> {
 	public boolean autoMode = false;
 	
 	private Database db;
+	private ServerCredentials cred;
 	
-	public ZoteroAPITask(String key)
-	{
-		this.queue = new ArrayList<APIRequest>();
-		this.key = key;
-	}
+	private Handler handler;
 
 	public ZoteroAPITask(Context c)
 	{
-		this.queue = new ArrayList<APIRequest>();
-		SharedPreferences settings = PreferenceManager.getDefaultSharedPreferences(c);
-		userID = settings.getString("user_id", null);
-		key = settings.getString("user_key", null);
+		queue = new ArrayList<APIRequest>();
+		cred = new ServerCredentials(c);
+		/* TODO reenable in a working way 
 		if (settings.getBoolean("sync_aggressively", false))
 			syncMode = AUTO_SYNC_STALE_COLLECTIONS;
+		*/
 		deletions = APIRequest.delete(c);
 		db = new Database(c);
 	}
-
-	public ZoteroAPITask(Context c, CursorAdapter adapter)
-	{
-		this.queue = new ArrayList<APIRequest>();
-		SharedPreferences settings = PreferenceManager.getDefaultSharedPreferences(c);
-		userID = settings.getString("user_id", null);
-		key = settings.getString("user_key", null);
-		if (settings.getBoolean("sync_aggressively", false))
-			syncMode = AUTO_SYNC_STALE_COLLECTIONS;
-		deletions = APIRequest.delete(c);
-		db = new Database(c);
-
+	
+	public void setHandler(Handler h) {
+		handler = h;
 	}
 	
-	public ZoteroAPITask(String key, CursorAdapter adapter)
-	{
-		this.queue = new ArrayList<APIRequest>();
-		this.key = key;
-		this.adapter = adapter;
+	private Handler getHandler() {
+		if (handler == null) {
+			handler = new Handler() {};
+		}
+		return handler;
 	}
-	
+
 	@Override
-	protected JSONArray[] doInBackground(APIRequest... params) {
+	protected Message doInBackground(APIRequest... params) {
         return doFetch(params);
 	} 
 	
-	public JSONArray[] doFetch(APIRequest... reqs)
+	@SuppressWarnings("unused")
+	public Message doFetch(APIRequest... reqs)
 	{	
 		int count = reqs.length;
-		
-		JSONArray[] ret = new JSONArray[count];
-        
+		        
         for (int i = 0; i < count; i++) {
         	if (reqs[i] == null) {
         		Log.d(TAG, "Skipping null request");
         		continue;
         	}
         	
-        	// Just in case we missed something, we fix the user ID right here too
-        	if (userID != null) reqs[i] = ServerCredentials.prep(userID, reqs[i]);
+        	// Just in case we missed something, we fix the user ID right here too,
+        	// and we set the key as well.
+        	reqs[i] = cred.prep(reqs[i]);
         	
         	try {
         		Log.i(TAG, "Executing API call: " + reqs[i].query);
-        		
-        		reqs[i].key = key;
-        		
-        		issue(reqs[i], db);
-				
+        		reqs[i].issue(db, cred);
 				Log.i(TAG, "Succesfully retrieved API call: " + reqs[i].query);
+				reqs[i].succeeded(db);
 				
-			} catch (Exception e) {
-				// TODO: determine if this is due to needing re-auth
-				Log.e(TAG, "Failed to execute API call: " + reqs[i].query, e);
-				return null;
+			} catch (APIException e) {
+				Log.e(TAG, "Failed to execute API call: " + e.request.query, e);
+				e.request.status = APIRequest.REQ_FAILING + e.request.getHttpStatus();
+				e.request.save(db);
+				Message msg = Message.obtain();
+				msg.arg1 = APIRequest.ERROR_UNKNOWN + e.request.getHttpStatus();
+				return msg;
 			}
 			
+        	// The XML parser's queue is simply from following continuations in the paged
+        	// feed. We shouldn't split out its requests...
 	    	if (XMLResponseParser.queue != null && !XMLResponseParser.queue.isEmpty()) {
 	        	Log.i(TAG, "Finished call, but adding " +
 	        				XMLResponseParser.queue.size() +
@@ -159,344 +137,81 @@ public class ZoteroAPITask extends AsyncTask<APIRequest, Integer, JSONArray[]> {
         
         // 
         if (queue.size() > 0) {
+        	// If the last batch saw unchanged items, don't follow the Atom
+        	// continuations; just run the child requests
+        	// XXX This is disabled for now
+        	if (false && !XMLResponseParser.followNext) {
+            	ArrayList<APIRequest> toRemove = new ArrayList<APIRequest>();
+        		for (APIRequest r : queue) {
+        			if (r.type != APIRequest.ITEMS_CHILDREN) {
+        				Log.d(TAG, "Removing request from queue since last page had old items: "+r.query);
+        				toRemove.add(r);
+        			}
+        		}
+        		queue.removeAll(toRemove);
+        	}
         	Log.i(TAG, "Starting queued requests: " + queue.size() + " requests");
     		APIRequest[] templ = { };
     		APIRequest[] requests = queue.toArray(templ);
         	queue.clear();
-        	Log.i(TAG, "Now: "+queue.size());
-
-    		this.doFetch(requests);
-        	// XXX FOR TESTING FOR NOW
-        	return null;
+        	Log.i(TAG, "Queue size now: "+queue.size());
+        	// XXX I suspect that this calling of doFetch from doFetch might be the cause of our
+        	// out-of-memory situations. We may be able to accomplish the same thing by expecting
+        	// the code listening to our handler to fetch again if QUEUED_MORE is received. In that
+        	// case, we could just save our queue here and really return.
+        	
+        	// XXX Test: Here, we try to use doInBackground instead
+    		doInBackground(requests);
+    		
+    		// Return a message with the number of requests added to the queue
+        	Message msg = Message.obtain();
+        	msg.arg1 = APIRequest.QUEUED_MORE;
+        	msg.arg2 = requests.length;
+        	return msg;
         }
 
         
     	// Here's where we tie in to periodic housekeeping syncs        
     	// If we're already in auto mode (that is, here), just move on
-    	if (this.autoMode) return ret;
+    	if (autoMode) {
+    		Message msg = Message.obtain();
+    		msg.arg1 = APIRequest.UPDATED_DATA;
+    		return msg;
+    	}
     	
     	Log.d(TAG, "Sending local changes");
     	Item.queue(db);
     	Attachment.queue(db);
-    	Log.d(TAG, Item.queue.size() + " items");
-    	int length = Item.queue.size();
-    	Log.d(TAG, Attachment.queue.size() + " attachments");
-    	length += Attachment.queue.size();
-    	Log.d(TAG, ItemCollection.additions.size() + " new memberships");
-    	length += ItemCollection.additions.size();
-    	Log.d(TAG, ItemCollection.removals.size() + " removed membership");
-    	length += ItemCollection.removals.size();
-    	length += deletions.size();
-    	int basicLength = length;
-    	// We pref this off
-    	if (syncMode == AUTO_SYNC_STALE_COLLECTIONS) {
-        	ItemCollection.queue(db);
-        	length += ItemCollection.queue.size();
-    	}
-    	APIRequest[] mReqs = new APIRequest[length];
-    	for (int j = 0; j < basicLength; j++) {
-    		if (j < Item.queue.size()) {
-    			Log.d(TAG, "Queueing dirty item ("+j+"): "+Item.queue.get(j).getTitle());
-    			mReqs[j] = ServerCredentials.prep(userID, APIRequest.update(Item.queue.get(j)));
-    		} else if (j < Item.queue.size()
-    					+ Attachment.queue.size()) {
-        			Log.d(TAG, "Queueing dirty attachment ("+j+"): "+Attachment.queue.get(j - Item.queue.size()).key);
-        			mReqs[j] = ServerCredentials.prep(userID, APIRequest.update(Attachment.queue.get(j - Item.queue.size()), db));
-    		} else if (j < Item.queue.size()
-    					+ Attachment.queue.size()
-    					+ ItemCollection.additions.size()) {
-    			Log.d(TAG, "Queueing new collection membership ("+j+")");
-    			mReqs[j] = ServerCredentials.prep(userID,
-    							ItemCollection.additions.get(j
-    								- Item.queue.size()
-    								- Attachment.queue.size()));
-    		} else if (j < Item.queue.size() 
-    					+ Attachment.queue.size()
-    					+ ItemCollection.additions.size() 
-    					+ ItemCollection.removals.size()) {
-    			Log.d(TAG, "Queueing removed collection membership ("+j+")");
-    			mReqs[j] = ServerCredentials.prep(userID,
-    						ItemCollection.removals.get(j 
-    								- Item.queue.size()
-    								- Attachment.queue.size()
-    								- ItemCollection.additions.size()));
-    		} else if (j < Item.queue.size() 
-    					+ Attachment.queue.size()
-    					+ ItemCollection.additions.size() 
-    					+ ItemCollection.removals.size()
-    					+ deletions.size()) {
-    			Log.d(TAG, "Queueing deletion ("+j+")");
-    			mReqs[j] = ServerCredentials.prep(userID,
-						deletions.get(j 
-								- Item.queue.size() 
-								- Attachment.queue.size()
-								- ItemCollection.additions.size()
-								- ItemCollection.removals.size()));
-    		}
-    	}
-    	// We'll clear the collection change queues; we may need to re-add failed requests later
-		ItemCollection.additions.clear();
-		ItemCollection.removals.clear();
     	
-    	// We pref this off
-    	if (syncMode == AUTO_SYNC_STALE_COLLECTIONS) {
-        	for (int j = 0; j < ItemCollection.queue.size(); j++) {
-       			Log.d(TAG, "Syncing dirty or stale collection: "+ItemCollection.queue.get(j).getTitle());
-        		mReqs[basicLength + j] = new APIRequest(ServerCredentials.APIBASE
-							+ ServerCredentials.prep(userID, ServerCredentials.COLLECTIONS)
-							+"/"+ItemCollection.queue.get(j).getKey() + "/items",
-							"get",
-							key);
-        	}
+    	APIRequest[] templ = {};
+    	
+    	ArrayList<APIRequest> list = new ArrayList<APIRequest>();
+    	for (Item i : Item.queue) {
+    		list.add(cred.prep(APIRequest.update(i)));
     	}
+    	
+    	for (Attachment a : Attachment.queue) {
+    		list.add(cred.prep(APIRequest.update(a, db)));
+    	}
+    	
+    	// This queue has deletions, collection memberships, and failing requests
+    	// We may want to filter it in the future
+    	list.addAll(APIRequest.queue(db));
+    	
     	// We're in auto mode...
-    	this.autoMode = true;
-    	this.doInBackground(mReqs);
-         
-        return ret;
+    	autoMode = true;
+    	doInBackground(list.toArray(templ));
+
+    	// Return a message noting that we've queued more requests
+		Message msg = Message.obtain();
+    	msg.arg1 = APIRequest.QUEUED_MORE;
+    	msg.arg2 = list.size();
+    	return msg;
 	}
 	
 	
 	@Override
-	protected void onPostExecute(JSONArray[] result) {
-		// invoked on the UI thread
-    		if (result == null) {
-	        	Log.e(TAG, "Returned NULL; looks like a problem communicating with server; review stack trace.");
-	        	// there was an error
-	        	String text = "Error communicating with server.";	
-	        	Log.i(TAG, text);
-    		} else {
-	        	if (this.adapter != null) {
-		        	this.adapter.notifyDataSetChanged();
-		        	Log.i(TAG, "Finished call, notified parent adapter!");
-	        	} else {
-		        	Log.i(TAG, "Finished call successfully, but nobody to notify");        		
-	        	}
-    		}
-    }
-	
-	/**
-	 * Executes the specified APIRequest and handles the response
-	 * 
-	 * This is done synchronously; use the the AsyncTask interface for calls
-	 * from the UI thread.
-	 * 
-	 * @param req
-	 * @return
-	 */
-	public static String issue(APIRequest req, Database db) {
-		// Check that the method makes sense
-		String method = req.method.toLowerCase();
-		if (!method.equals("get")
-			&& !method.equals("post")
-			&& !method.equals("delete")
-			&& !method.equals("put")
-		) {
-			// TODO Throw an exception here.
-			Log.e(TAG, "Invalid method: "+method);
-			return null;
-		}
-		String resp = "";
-		try {
-			// Append content=json everywhere, if we don't have it yet
-			if (req.query.indexOf("content=json") == -1) {
-				if (req.query.indexOf("?") != -1) {
-					req.query += "&content=json";
-				} else {
-					req.query += "?content=json";
-				}
-			}
-			
-			// Append the key, if defined, to all requests
-			if (req.key != null && req.key != "") {
-				req.query += "&key=" + req.key;
-
-			}
-			if (method.equals("put")) {
-				req.query = req.query.replace("content=json&", "");
-			}
-			Log.i(TAG, "Request "+ req.method +": " + req.query);		
-
-			URI uri = new URI(req.query);
-			HttpClient client = new DefaultHttpClient();
-			// The default implementation includes an Expect: header, which
-			// confuses the Zotero servers.
-			client.getParams().setParameter("http.protocol.expect-continue", false);
-			// We also need to send our data nice and raw.
-			client.getParams().setParameter("http.protocol.content-charset", "UTF-8");
-
-			/* It would be good to rework this mess to be less repetitive */
-			if (method.equals("post")) {
-				HttpPost request = new HttpPost();
-				request.setURI(uri);
-				
-				// Set headers if necessary
-				if(req.ifMatch != null) {
-					request.setHeader("If-Match", req.ifMatch);
-				}
-				if(req.contentType != null) {
-					request.setHeader("Content-Type", req.contentType);
-				}
-				if(req.body != null) {
-					Log.d(TAG, "Post body: "+req.body);
-					// Force the encoding here
-					StringEntity entity = new StringEntity(req.body,"UTF-8");
-					request.setEntity(entity);
-				}
-				if (req.disposition.equals("xml")) {
-					HttpResponse hr = client.execute(request);
-					int code = hr.getStatusLine().getStatusCode();
-					Log.d(TAG, code + " : "+ hr.getStatusLine().getReasonPhrase());
-					if (code < 400) {
-						HttpEntity he = hr.getEntity();
-						InputStream in = he.getContent();
-						XMLResponseParser parse = new XMLResponseParser(in);
-						if (req.updateKey != null && req.updateType != null)
-							parse.update(req.updateType, req.updateKey);
-						// The response on POST in XML mode (new item) is a feed
-						parse.parse(XMLResponseParser.MODE_FEED, uri.toString(), db);
-						resp = "XML was parsed.";
-					} else {
-						Log.e(TAG, "Not parsing non-XML response, code >= 400");
-						ByteArrayOutputStream ostream = new ByteArrayOutputStream();
-						hr.getEntity().writeTo(ostream);
-						Log.e(TAG,"Error Body: "+ ostream.toString());
-						Log.e(TAG,"Post Body:"+ req.body);
-					}
-				} else {
-					BasicResponseHandler brh = new BasicResponseHandler();
-					try {
-						resp = client.execute(request, brh);
-						req.onSuccess(db);
-					} catch (ClientProtocolException e) {
-						Log.e(TAG, "Exception thrown issuing POST request: ", e);
-						req.onFailure(db);
-					}
-				}
-			} else if (method.equals("put")) {
-				HttpPut request = new HttpPut();
-				request.setURI(uri);
-				
-				// Set headers if necessary
-				if(req.ifMatch != null) {
-					request.setHeader("If-Match", req.ifMatch);
-				}
-				if(req.contentType != null) {
-					request.setHeader("Content-Type", req.contentType);
-				}
-				if(req.body != null) {
-					// Force the encoding here
-					StringEntity entity = new StringEntity(req.body,"UTF-8");
-					request.setEntity(entity);
-				}
-				if (req.disposition.equals("xml")) {
-					HttpResponse hr = client.execute(request);
-					int code = hr.getStatusLine().getStatusCode();
-					Log.d(TAG, code + " : "+ hr.getStatusLine().getReasonPhrase());
-					if (code < 400) {
-						HttpEntity he = hr.getEntity();
-						InputStream in = he.getContent();
-						XMLResponseParser parse = new XMLResponseParser(in);
-						parse.parse(XMLResponseParser.MODE_ENTRY, uri.toString(), db);
-						resp = "XML was parsed.";
-						// TODO
-						req.onSuccess(db);
-					} else {
-						Log.e(TAG, "Not parsing non-XML response, code >= 400");
-						ByteArrayOutputStream ostream = new ByteArrayOutputStream();
-						hr.getEntity().writeTo(ostream);
-						Log.e(TAG,"Error Body: "+ ostream.toString());
-						Log.e(TAG,"Put Body:"+ req.body);
-						// TODO
-						req.onFailure(db);
-						// "Precondition Failed"
-						// The item changed server-side, so we have a conflict to resolve...
-						// XXX This is a hard problem.
-						if (code == 412) {
-							Log.e(TAG, "Skipping dirtied item with server-side changes as well");
-						}
-					}
-				} else {
-					BasicResponseHandler brh = new BasicResponseHandler();
-					try {
-						resp = client.execute(request, brh);
-						req.onSuccess(db);
-					} catch (ClientProtocolException e) {
-						Log.e(TAG, "Exception thrown issuing PUT request: ", e);
-						req.onFailure(db);
-					}
-				}
-			} else if (method.equals("delete")) {
-				HttpDelete request = new HttpDelete();
-				request.setURI(uri);
-				if(req.ifMatch != null) {
-					request.setHeader("If-Match", req.ifMatch);
-				}
-				
-				BasicResponseHandler brh = new BasicResponseHandler();
-				try {
-					resp = client.execute(request, brh);
-					req.onSuccess(db);
-				} catch (ClientProtocolException e) {
-					Log.e(TAG, "Exception thrown issuing DELETE request: ", e);
-					req.onFailure(db);
-				}
-			} else {
-				HttpGet request = new HttpGet();
-				request.setURI(uri);
-				if(req.contentType != null) {
-					request.setHeader("Content-Type", req.contentType);
-				}
-				if (req.disposition.equals("xml")) {
-					HttpResponse hr = client.execute(request);
-					int code = hr.getStatusLine().getStatusCode();
-					Log.d(TAG, code + " : "+ hr.getStatusLine().getReasonPhrase());
-					if (code < 400) {
-						HttpEntity he = hr.getEntity();
-						InputStream in = he.getContent();
-						XMLResponseParser parse = new XMLResponseParser(in);
-						// We can tell from the URL whether we have a single item or a feed
-						int mode = (uri.toString().indexOf("/items?") == -1
-										&& uri.toString().indexOf("/top?") == -1
-										&& uri.toString().indexOf("/collections?") == -1
-										&& uri.toString().indexOf("/children?") == -1) ?
-											XMLResponseParser.MODE_ENTRY : XMLResponseParser.MODE_FEED;
-						parse.parse(mode, uri.toString(), db);
-						resp = "XML was parsed.";
-						// TODO
-						req.onSuccess(db);
-					} else {
-						Log.e(TAG, "Not parsing non-XML response, code >= 400");
-						ByteArrayOutputStream ostream = new ByteArrayOutputStream();
-						hr.getEntity().writeTo(ostream);
-						Log.e(TAG,"Error Body: "+ ostream.toString());
-						Log.e(TAG,"Put Body:"+ req.body);
-						// TODO
-						req.onFailure(db);
-						// "Precondition Failed"
-						// The item changed server-side, so we have a conflict to resolve...
-						// XXX This is a hard problem.
-						if (code == 412) {
-							Log.e(TAG, "Skipping dirtied item with server-side changes as well");
-						}
-					}
-				} else {
-					BasicResponseHandler brh = new BasicResponseHandler();
-					try {
-						resp = client.execute(request, brh);
-						req.onSuccess(db);
-					} catch (ClientProtocolException e) {
-						Log.e(TAG, "Exception thrown issuing GET request: ", e);
-						req.onFailure(db);
-					}
-				}
-			}
-			Log.i(TAG, "Response: " + resp);
-		} catch (IOException e) {
-			Log.e(TAG, "Connection error", e);
-		} catch (URISyntaxException e) {
-			Log.e(TAG, "URI error", e);
-		}
-		return resp;
+	protected void onPostExecute(Message result) {
+		getHandler().sendMessage(result);
 	}
 }

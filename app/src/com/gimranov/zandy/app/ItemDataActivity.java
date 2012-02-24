@@ -168,7 +168,6 @@ public class ItemDataActivity extends ExpandableListActivity {
 	        				Toast.LENGTH_SHORT).show();
 	        	}
         		return false;
-        		return false;
         	}
         });
         
